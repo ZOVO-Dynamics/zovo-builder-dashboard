@@ -1,6 +1,8 @@
 export const dynamic = "force-dynamic";
 
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import GeneratePanel from "@/components/GeneratePanel";
+import BlueprintPanel from "@/components/BlueprintPanel";
 
 
 export default function Home(){
@@ -52,6 +54,8 @@ Tracking
 </div>
 
 
+<GeneratePanel />
+      <BlueprintPanel />
 
 </DashboardLayout>
 
