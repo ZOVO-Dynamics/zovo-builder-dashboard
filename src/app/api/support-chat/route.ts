@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SUPPORT_SYSTEM_PROMPT } from "@/lib/support-chat-prompt";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -33,7 +35,41 @@ export async function POST(req: NextRequest) {
       .map((m) => `${m.role === "user" ? "Utilisateur" : "Assistant"}: ${m.content}`)
       .join("\n");
 
-    const fullPrompt = `${SUPPORT_SYSTEM_PROMPT}\n\nConversation:\n${conversationText}\n\nAssistant:`;
+    const session = await auth();
+    let userContext = "Utilisateur non connecte.";
+
+    if (session?.user?.id) {
+      const [user, subscription, lastGeneration] = await Promise.all([
+        prisma.user.findUnique({
+          where: { id: session.user.id },
+          select: { creditsBalance: true },
+        }),
+        prisma.subscription.findUnique({
+          where: { userId: session.user.id },
+          include: { plan: true, usageLimits: true },
+        }),
+        prisma.generation.findFirst({
+          where: { userId: session.user.id },
+          orderBy: { createdAt: "desc" },
+        }),
+      ]);
+
+      const now = new Date();
+      const currentLimit = subscription?.usageLimits.find(
+        (u) => u.periodStart <= now && u.periodEnd > now
+      );
+      const used = currentLimit?.generationsUsed ?? 0;
+      const cap = currentLimit?.generationsCap ?? subscription?.plan?.generationsLimit ?? 0;
+
+      userContext = [
+        `Plan actuel: ${subscription?.plan?.name ?? "Aucun abonnement (compte gratuit avec credits prepayes)"}`,
+        subscription?.plan ? `Generations utilisees ce mois: ${used}/${cap}` : null,
+        `Credits prepayes disponibles: ${user?.creditsBalance ?? 0}`,
+        lastGeneration ? `Dernier projet genere: "${lastGeneration.prompt.slice(0, 80)}"` : "Aucun projet genere pour l'instant",
+      ].filter(Boolean).join("\n");
+    }
+
+    const fullPrompt = `${SUPPORT_SYSTEM_PROMPT}\n\nContexte du compte utilisateur actuel:\n${userContext}\n\nConversation:\n${conversationText}\n\nAssistant:`;
 
     const response = await fetch("http://127.0.0.1:4000/api/generate", {
       method: "POST",
