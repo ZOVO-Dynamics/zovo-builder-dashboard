@@ -49,6 +49,19 @@ export async function POST(req: NextRequest) {
       `,
     });
 
+    resend.emails.send({
+      from: "ZOVO Support <notifications@zovo.ca>",
+      to: session.user.email,
+      subject: "Ta demande a bien ete transmise",
+      html: `
+        <p>Bonjour,</p>
+        <p>Ta demande de support a bien ete transmise a notre equipe. On te repond par email des que possible.</p>
+        <p>L'equipe ZOVO</p>
+      `,
+    }).catch((err) => {
+      console.error("Erreur envoi email confirmation utilisateur:", err);
+    });
+
     if (error) {
       console.error("Erreur envoi email escalade:", error);
       return NextResponse.json({ error: "Envoi echoue" }, { status: 502 });
