@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     const fullPrompt = `${SUPPORT_SYSTEM_PROMPT}\n\nConversation:\n${conversationText}\n\nAssistant:`;
 
-    const response = await fetch("https://ai.zovo.ca/api/generate", {
+    const response = await fetch("http://127.0.0.1:4000/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: fullPrompt }),
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await response.json();
-    return NextResponse.json({ reply: data.response, provider: data.provider });
+    return NextResponse.json({ response: data.response, provider: data.provider });
   } catch (err) {
     console.error("support-chat: unexpected error", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

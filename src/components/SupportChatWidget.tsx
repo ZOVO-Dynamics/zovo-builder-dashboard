@@ -7,6 +7,80 @@ type Message = {
   content: string;
 };
 
+function formatMessage(text: string) {
+  const lines = text.split("\n");
+  const blocks: React.ReactNode[] = [];
+  let i = 0;
+  let key = 0;
+
+  const renderBold = (s: string) => {
+    const parts = s.split(/\*\*(.+?)\*\*/g);
+    return parts.map((part, idx) =>
+      idx % 2 === 1 ? <strong key={idx}>{part}</strong> : part
+    );
+  };
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.trim().startsWith("|")) {
+      const tableLines: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        tableLines.push(lines[i].trim());
+        i++;
+      }
+      const rows = tableLines
+        .filter((l) => !/^\|[\s-:|]+\|$/.test(l))
+        .map((l) => l.split("|").map((c) => c.trim()).filter((c) => c !== ""));
+      const [header, ...body] = rows;
+      blocks.push(
+        <div key={key++} className="mt-2 space-y-2">
+          {body.map((row, ri) => (
+            <div key={ri} className="rounded border border-slate-600/30 bg-slate-500/10 p-2">
+              {row.map((cell, ci) => (
+                <div key={ci}>
+                  <span className="text-blue-300">{header?.[ci] ?? ""}: </span>
+                  {renderBold(cell)}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      );
+      continue;
+    }
+
+    const numbered = line.trim().match(/^(\d+)\.\s*(.*)/);
+    if (numbered) {
+      let numberedText = numbered[2];
+      let advance = 1;
+      if (!numberedText.trim() && i + 1 < lines.length) {
+        numberedText = lines[i + 1];
+        advance = 2;
+      }
+      blocks.push(
+        <div key={key++} className="mt-1.5 flex gap-2">
+          <span className="font-semibold text-blue-300">{numbered[1]}.</span>
+          <span>{renderBold(numberedText)}</span>
+        </div>
+      );
+      i += advance;
+      continue;
+    }
+
+    if (line.trim() === "") {
+      blocks.push(<div key={key++} className="h-2" />);
+      i++;
+      continue;
+    }
+
+    blocks.push(<div key={key++}>{renderBold(line)}</div>);
+    i++;
+  }
+
+  return blocks;
+}
+
+
 export default function SupportChatWidget() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
@@ -109,7 +183,7 @@ export default function SupportChatWidget() {
                       : "max-w-[85%] rounded-sm border border-slate-600/30 bg-slate-500/5 px-3 py-2 text-slate-200"
                   }
                 >
-                  {m.content}
+                  {m.role === "assistant" ? formatMessage(m.content) : m.content}
                 </div>
               </div>
             ))}
