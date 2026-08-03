@@ -1,0 +1,500 @@
+import { NextRequest, NextResponse } from "next/server";
+import { stripe } from "@/lib/stripe";
+import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+
+export async function POST(req: NextRequest) {
+  try {
+    const session = await auth();
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: "Non authentifié" },
+        { status: 401 }
+      );
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const internalName = body?.plan;
+
+    if (!internalName || (internalName !== "weekly_pro" && internalName !== "monthly_pro")) {
+      return NextResponse.json(
+        { error: "Plan non reconnu. Utilisez 'weekly_pro' ou 'monthly_pro'." },
+        { status: 400 }
+      );
+    }
+
+    const plan = await prisma.subscriptionPlan.findUnique({
+      where: { internalName },
+    });
+
+    if (!plan || !plan.stripePriceId) {
+      return NextResponse.json(
+        { error: "Plan introuvable ou non configuré côté Stripe" },
+        { status: 404 }
+      );
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      include: { subscription: true },
+    });
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "Utilisateur introuvable" },
+        { status: 404 }
+      );
+    }
+
+    let customerId = user.subscription?.stripeCustomerId;
+
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        metadata: { userId: user.id },
+      });
+      customerId = customer.id;
+    }
+
+    const checkoutSession = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: "subscription",
+      line_items: [
+        {
+          price: plan.stripePriceId,
+          quantity: 1,
+        },
+      ],
+      success_url: `${process.env.AUTH_URL}/billing?success=true`,
+      cancel_url: `${process.env.AUTH_URL}/billing?canceled=true`,
+      metadata: {
+        userId: user.id,
+        planId: plan.id,
+        internalName: plan.internalName,
+      },
+      subscription_data: {
+        metadata: {
+          userId: user.id,
+          planId: plan.id,
+          internalName: plan.internalName,
+        },
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      url: checkoutSession.url,
+    });
+  } catch (error: any) {
+    console.error("ZOVO CHECKOUT ERROR:", error);
+    return NextResponse.json(
+      { success: false, error: error?.message || String(error) },
+      { status: 500 }
+    );
+  }
+}
+import { NextRequest, NextResponse } from "next/server";
+import { stripe } from "@/lib/stripe";
+import { prisma } from "@/lib/prisma";
+import Stripe from "stripe";
+import { Resend } from "resend";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+export async function POST(req: NextRequest) {
+  const body = await req.text();
+  const signature = req.headers.get("stripe-signature");
+
+  if (!signature) {
+    return NextResponse.json(
+      { error: "Signature Stripe manquante" },
+      { status: 400 }
+    );
+  }
+
+  let event: Stripe.Event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      body,
+      signature,
+      process.env.STRIPE_WEBHOOK_SECRET as string
+    );
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: error.message },
+      { status: 400 }
+    );
+  }
+
+  try {
+    switch (event.type) {
+
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+
+        const userId = session.metadata?.userId;
+        const planId = session.metadata?.planId;
+
+        if (!userId || !session.subscription) break;
+
+        const subscriptionId = session.subscription as string;
+
+        const subscriptionResponse =
+          await stripe.subscriptions.retrieve(subscriptionId);
+
+        const subscription =
+          subscriptionResponse as unknown as Stripe.Subscription;
+
+        const item = subscription.items.data[0];
+
+        await prisma.subscription.upsert({
+          where: {
+            userId,
+          },
+          create: {
+            userId,
+            planId: planId || null,
+            stripeCustomerId: String(session.customer),
+            stripeSubscriptionId: subscription.id,
+            stripePriceId: item?.price.id,
+            status: subscription.status,
+            currentPeriodStart:
+              new Date((item?.current_period_start ?? Math.floor(Date.now()/1000)) * 1000),
+            currentPeriodEnd:
+              new Date((item?.current_period_end ?? Math.floor(Date.now()/1000)) * 1000),
+            cancelAtPeriodEnd:
+              subscription.cancel_at_period_end,
+          },
+          update: {
+            planId: planId || null,
+            stripeCustomerId: String(session.customer),
+            stripeSubscriptionId: subscription.id,
+            stripePriceId: item?.price.id,
+            status: subscription.status,
+            currentPeriodStart:
+              new Date((item?.current_period_start ?? Math.floor(Date.now()/1000)) * 1000),
+            currentPeriodEnd:
+              new Date((item?.current_period_end ?? Math.floor(Date.now()/1000)) * 1000),
+            cancelAtPeriodEnd:
+              subscription.cancel_at_period_end,
+          },
+        });
+
+        const email = session.customer_details?.email;
+
+        if (email) {
+          await resend.emails.send({
+            from: "ZOVO <notifications@zovo.ca>",
+            to: email,
+            subject: "ZOVO Pro activé",
+            html:
+              "<h2>Bienvenue dans ZOVO Pro 🚀</h2><p>Votre abonnement est actif.</p>",
+          });
+        }
+
+        break;
+      }
+
+
+      case "customer.subscription.created":
+      case "customer.subscription.updated":
+      case "customer.subscription.deleted": {
+
+        const subscription =
+          event.data.object as Stripe.Subscription;
+
+        const item = subscription.items.data[0];
+
+        const userId =
+          subscription.metadata?.userId;
+
+        if (!userId) break;
+
+
+        await prisma.subscription.upsert({
+          where: {
+            stripeSubscriptionId: subscription.id,
+          },
+          create: {
+            userId,
+            stripeCustomerId:
+              String(subscription.customer),
+            stripeSubscriptionId:
+              subscription.id,
+            stripePriceId:
+              item?.price.id,
+            status:
+              subscription.status,
+            currentPeriodStart:
+              new Date((item?.current_period_start ?? Math.floor(Date.now()/1000)) * 1000),
+            currentPeriodEnd:
+              new Date((item?.current_period_end ?? Math.floor(Date.now()/1000)) * 1000),
+            cancelAtPeriodEnd:
+              subscription.cancel_at_period_end,
+          },
+          update: {
+            status:
+              subscription.status,
+            stripePriceId:
+              item?.price.id,
+            currentPeriodStart:
+              new Date((item?.current_period_start ?? Math.floor(Date.now()/1000)) * 1000),
+            currentPeriodEnd:
+              new Date((item?.current_period_end ?? Math.floor(Date.now()/1000)) * 1000),
+            cancelAtPeriodEnd:
+              subscription.cancel_at_period_end,
+          },
+        });
+
+        break;
+      }
+
+      default:
+        break;
+    }
+
+
+    return NextResponse.json({
+      received: true,
+    });
+
+
+  } catch(error:any){
+
+    console.error(
+      "STRIPE WEBHOOK ERROR:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        error:error.message
+      },
+      {
+        status:500
+      }
+    );
+  }
+}
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Plan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+
+  plan          Plan      @default(FREE)
+  monthlyUsage  Int       @default(0)
+  usageResetAt  DateTime  @default(now())
+
+  accounts      Account[]
+  sessions      Session[]
+  subscription  Subscription?
+  generations   Generation[]
+  entitlement   UserEntitlement?
+  creditsBalance   Int              @default(0)
+  creditTransactions CreditTransaction[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  planId               String?
+  status               String    @default("inactive")
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  stripePriceId        String?
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean   @default(false)
+  discountId           String?
+
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan     SubscriptionPlan? @relation(fields: [planId], references: [id])
+  discount Discount?         @relation(fields: [discountId], references: [id])
+
+  usageLimits UsageLimit[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+enum PlanTier {
+  WEEKLY_PRO
+  MONTHLY_PRO
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+  TRIALING
+}
+
+model SubscriptionPlan {
+  id                String   @id @default(cuid())
+  name              String   @unique
+  internalName      String   @unique
+  tier              PlanTier
+  priceCents        Int
+  currency           String  @default("CAD")
+  billingInterval   String
+  generationsLimit  Int
+  stripeProductId   String?
+  stripePriceId     String?
+  features          Json
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  subscriptions     Subscription[]
+}
+
+
+
+model UsageLimit {
+  id             String   @id @default(cuid())
+  subscriptionId String
+  periodStart    DateTime
+  periodEnd      DateTime
+  generationsUsed Int     @default(0)
+  generationsCap  Int
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([subscriptionId, periodStart])
+}
+
+model Generation {
+  id             String   @id @default(cuid())
+  userId         String
+  subscriptionId String?
+  prompt         String   @db.Text
+  status         String   @default("completed")
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Discount {
+  id             String   @id @default(cuid())
+  code           String   @unique
+  percentOff     Int
+  appliesToTier  PlanTier
+  validFrom      DateTime
+  validUntil     DateTime
+  stripeCouponId String?
+  createdAt      DateTime @default(now())
+
+  subscriptions Subscription[]
+
+  @@index([validFrom, validUntil])
+}
+
+model UserEntitlement {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  features  Json
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum CreditTransactionType {
+  PURCHASE
+  CONSUMPTION
+  REFUND
+}
+
+model CreditPack {
+  id             String  @id @default(cuid())
+  name           String  @unique
+  priceCents     Int
+  currency       String  @default("CAD")
+  credits        Int
+  stripePriceId  String?
+  active         Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CreditTransaction {
+  id                    String                @id @default(cuid())
+  userId                String
+  type                  CreditTransactionType
+  amount                Int
+  balanceAfter          Int
+  stripePaymentIntentId String?               @unique
+  generationId          String?
+  createdAt             DateTime              @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

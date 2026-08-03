@@ -1,5 +1,6 @@
 export interface ProjectBlueprint {
   projectType: string;
+  projectName: string;
   framework: string;
   language: string;
   features: string[];
@@ -36,8 +37,18 @@ export class PromptAnalyzer {
       features.push("api");
     }
 
+    const slugName = prompt
+      .toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9\s-]/g, "")
+      .trim()
+      .split(/\s+/)
+      .slice(0, 4)
+      .join("-") || "projet";
+
     return {
       projectType: "web-app",
+      projectName: slugName,
       framework: "nextjs",
       language: "typescript",
       features,
@@ -50,4 +61,5 @@ export class PromptAnalyzer {
   }
 }
 
-export default new PromptAnalyzer();
+const promptanalyzerInstance = new PromptAnalyzer();
+export default promptanalyzerInstance;

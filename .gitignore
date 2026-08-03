@@ -41,3 +41,5 @@ yarn-error.log*
 next-env.d.ts
 *.bak-before-remove-ui
 *.bak-before-remove-ui
+
+/src/generated/prisma
