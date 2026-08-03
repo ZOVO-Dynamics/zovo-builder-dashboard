@@ -39,7 +39,7 @@ function formatMessage(text: string) {
             <div key={ri} className="rounded border border-slate-600/30 bg-slate-500/10 p-2">
               {row.map((cell, ci) => (
                 <div key={ci}>
-                  <span className="text-blue-300">{header?.[ci] ?? ""}: </span>
+                  <span className="text-[#E8C34A]">{header?.[ci] ?? ""}: </span>
                   {renderBold(cell)}
                 </div>
               ))}
@@ -60,7 +60,7 @@ function formatMessage(text: string) {
       }
       blocks.push(
         <div key={key++} className="mt-1.5 flex gap-2">
-          <span className="font-semibold text-blue-300">{numbered[1]}.</span>
+          <span className="font-semibold text-[#E8C34A]">{numbered[1]}.</span>
           <span>{renderBold(numberedText)}</span>
         </div>
       );
@@ -200,36 +200,36 @@ export default function SupportChatWidget() {
         <button
           onClick={() => setOpen(true)}
           aria-label="Ouvrir le support"
-          className="group relative flex h-14 w-14 items-center justify-center rounded-sm border border-blue-400/40 bg-[#0b1220] text-blue-300 shadow-[0_0_0_1px_rgba(96,165,250,0.15)] transition hover:border-blue-300 hover:text-blue-200"
+          className="group relative flex h-14 w-14 items-center justify-center rounded-sm border border-[#C9A227]/40 bg-[#0A0A0C] text-[#E8C34A] shadow-[0_0_0_1px_rgba(96,165,250,0.15)] transition hover:border-[#C9A227] hover:text-[#E8C34A]"
         >
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4">
             <path d="M4 5h16v11H8l-4 4V5z" />
             <path d="M8 9h8M8 12h5" strokeLinecap="round" />
           </svg>
-          <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-blue-400" />
+          <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-[#C9A227]" />
         </button>
       )}
 
       {open && (
-        <div className="flex h-[420px] w-[300px] flex-col overflow-hidden rounded-sm border border-blue-400/30 bg-[#0b1220] shadow-2xl">
-          <div className="flex items-center justify-between border-b border-blue-400/20 bg-[#0d1626] px-4 py-3">
+        <div className="flex h-[420px] w-[300px] flex-col overflow-hidden rounded-sm border border-[#C9A227]/30 bg-[#0A0A0C] shadow-2xl">
+          <div className="flex items-center justify-between border-b border-[#C9A227]/20 bg-[#16161A] px-4 py-3">
             <div className="flex flex-col">
-              <span className="text-[10px] uppercase tracking-[0.2em] text-blue-400/70">
+              <span className="text-[10px] uppercase tracking-[0.2em] text-[#C9A227]/70">
                 ZOVO — Support
               </span>
-              <span className="text-sm text-blue-100">Assistant technique</span>
+              <span className="text-sm text-[#F5F1E8]">Assistant technique</span>
             </div>
             <button
               onClick={escalateToHuman}
               disabled={escalating || escalated}
-              className="mr-2 rounded-sm border border-blue-400/30 px-2 py-1 text-[10px] text-blue-300 hover:bg-blue-500/10 disabled:opacity-40"
+              className="mr-2 rounded-sm border border-[#C9A227]/30 px-2 py-1 text-[10px] text-[#E8C34A] hover:bg-[#C9A227]/10 disabled:opacity-40"
             >
               {escalated ? "Transmis" : escalating ? "..." : "Parler a un humain"}
             </button>
             <button
               onClick={() => setOpen(false)}
               aria-label="Fermer le support"
-              className="text-blue-400/60 transition hover:text-blue-200"
+              className="text-[#9B9B95] transition hover:text-[#E8C34A]"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
                 <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
@@ -245,7 +245,7 @@ export default function SupportChatWidget() {
                     key={s}
                     onClick={() => sendMessage(s)}
                     disabled={loading}
-                    className="rounded-sm border border-blue-400/30 bg-blue-500/5 px-2.5 py-1.5 text-left text-[12px] text-blue-200 transition hover:border-blue-300 hover:bg-blue-500/10 disabled:opacity-40"
+                    className="rounded-sm border border-[#C9A227]/30 bg-[#C9A227]/5 px-2.5 py-1.5 text-left text-[12px] text-[#E8C34A] transition hover:border-[#C9A227] hover:bg-[#C9A227]/10 disabled:opacity-40"
                   >
                     {s}
                   </button>
@@ -257,7 +257,7 @@ export default function SupportChatWidget() {
                 <div
                   className={
                     m.role === "user"
-                      ? "max-w-[85%] rounded-sm border border-blue-400/30 bg-blue-500/10 px-3 py-2 text-blue-50"
+                      ? "max-w-[85%] rounded-sm border border-[#C9A227]/30 bg-[#C9A227]/10 px-3 py-2 text-[#F5F1E8]"
                       : "max-w-[85%] rounded-sm border border-slate-600/30 bg-slate-500/5 px-3 py-2 text-slate-200"
                   }
                 >
@@ -266,13 +266,13 @@ export default function SupportChatWidget() {
                     <div className="mt-2 flex gap-2">
                       <Link
                         href="/pricing"
-                        className="rounded-sm border border-blue-400/40 px-2 py-1 text-[11px] text-blue-200 hover:bg-blue-500/10"
+                        className="rounded-sm border border-[#C9A227]/40 px-2 py-1 text-[11px] text-[#E8C34A] hover:bg-[#C9A227]/10"
                       >
                         Voir les plans
                       </Link>
                       <Link
                         href="/billing"
-                        className="rounded-sm border border-blue-400/40 px-2 py-1 text-[11px] text-blue-200 hover:bg-blue-500/10"
+                        className="rounded-sm border border-[#C9A227]/40 px-2 py-1 text-[11px] text-[#E8C34A] hover:bg-[#C9A227]/10"
                       >
                         Gerer mon abonnement
                       </Link>
@@ -299,20 +299,20 @@ export default function SupportChatWidget() {
             )}
           </div>
 
-          <div className="flex items-end gap-2 border-t border-blue-400/20 bg-[#0d1626] p-3">
+          <div className="flex items-end gap-2 border-t border-[#C9A227]/20 bg-[#16161A] p-3">
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Écris ta question..."
               rows={1}
-              className="max-h-24 flex-1 resize-none rounded-sm border border-blue-400/20 bg-[#0b1220] px-3 py-2 text-sm text-blue-50 placeholder:text-blue-400/40 focus:border-blue-300 focus:outline-none"
+              className="max-h-24 flex-1 resize-none rounded-sm border border-[#C9A227]/20 bg-[#0A0A0C] px-3 py-2 text-sm text-[#F5F1E8] placeholder:text-[#9B9B95] focus:border-blue-300 focus:outline-none"
             />
             <button
               onClick={() => sendMessage()}
               disabled={loading || !input.trim()}
               aria-label="Envoyer"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-blue-400/40 text-blue-300 transition hover:border-blue-300 hover:text-blue-200 disabled:opacity-30"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-[#C9A227]/40 text-[#E8C34A] transition hover:border-[#C9A227] hover:text-[#E8C34A] disabled:opacity-30"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <path d="M4 12h16M13 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
