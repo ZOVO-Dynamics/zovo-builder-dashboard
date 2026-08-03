@@ -173,9 +173,14 @@ export default function SupportChatWidget() {
         body: JSON.stringify({ messages: nextMessages }),
       });
 
-      if (!res.ok) throw new Error("request_failed");
-
       const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error ?? "La connexion au support a échoué. Réessaie dans un instant.");
+        setLoading(false);
+        return;
+      }
+
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: data.response ?? "Pas de réponse reçue." },
