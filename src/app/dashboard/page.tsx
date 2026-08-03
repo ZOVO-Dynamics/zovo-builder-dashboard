@@ -18,7 +18,7 @@ export default function Dashboard() {
         <GeneratorPanel />
       </div>
 
-      <div className="mt-12 grid gap-6 text-center md:grid-cols-3">
+      <div className="mt-12 grid min-w-0 gap-6 text-center md:grid-cols-3">
         <DashboardStats />
       </div>
     </DashboardLayout>

@@ -1,0 +1,49 @@
+/* ============================================================
+   CORRECTIF D'AFFICHAGE MOBILE / RESPONSIVE (ZOVO DASHBOARD)
+   ============================================================ */
+
+/* Force le respect des dimensions de l'écran */
+html, body {
+  width: 100% !important;
+  max-width: 100vw !important;
+  overflow-x: hidden !important; /* Supression de l'espace blanc à droite */
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  -webkit-text-size-adjust: 100%;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box !important;
+}
+
+/* Forcer les conteneurs et sections à être adaptatifs */
+div, main, section, header, nav, footer, article, form {
+  max-width: 100% !important;
+}
+
+/* Correction des éléments à largeur fixe qui font tout déborder */
+[class*="container"],
+[class*="wrapper"],
+[class*="dashboard"],
+[class*="card"],
+[class*="main"] {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Gestion du contenu large (tableaux, code, formulaires) */
+table, .table, pre, code {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: auto !important; /* Permet de scroller uniquement l'élément si nécessaire */
+  white-space: pre-wrap !important;
+}
+
+/* S'assurer que les images et médias ne dépassent jamais */
+img, video, canvas, svg {
+  max-width: 100% !important;
+  height: auto !important;
+}

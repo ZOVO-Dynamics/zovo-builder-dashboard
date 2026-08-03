@@ -1,0 +1,45 @@
+/* --- Correction Responsivité Globale --- */
+
+/* Appliquez d'abord la balise meta viewport dans le <head> HTML :
+   <meta name="viewport" content="width=device-width, initial-scale=1.0"> */
+
+/* 1. Réinitialisation globale pour empêcher le débordement horizontal */
+html, body {
+  width: 100% !important;
+  max-width: 100vw !important;
+  overflow-x: hidden !important; /* Empêche le défilement horizontal */
+  margin: 0 !important;
+  padding: 0 !important;
+  -webkit-overflow-scrolling: touch; /* Améliore le défilement sur iOS */
+}
+
+/* 2. Assure que le box-sizing est hérité (important pour padding/border) */
+html {
+  box-sizing: border-box;
+}
+
+*, *::before, *::after {
+  box-sizing: inherit;
+}
+
+/* 3. Correction des conteneurs principaux (Remplacez '.dashboard-container' par votre classe) */
+/* Ciblez les éléments qui posent problème */
+.dashboard-container, 
+#main-content,
+[class*="container"] {
+  width: 100% !important;
+  max-width: 100% !important; /* Force la largeur sur mobile */
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 15px !important; /* Marge intérieure optionnelle */
+  padding-right: 15px !important;
+}
+
+/* 4. Gestion des tableaux ou grands éléments de données */
+.table-responsive,
+table {
+  display: block;
+  width: 100%;
+  overflow-x: auto; /* Permet le défilement interne UNIQUEMENT pour le tableau */
+  -webkit-overflow-scrolling: touch;
+}

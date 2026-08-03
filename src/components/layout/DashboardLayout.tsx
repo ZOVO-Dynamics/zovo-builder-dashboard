@@ -17,7 +17,7 @@ export default function DashboardLayout({
     <div className={`${display.variable} ${body.variable} ${mono.variable} flex min-h-screen bg-[#0A0A0C]`}>
       <Sidebar />
 
-      <main className="flex-1 p-8 pt-24 text-[#F5F1E8] md:pt-8" style={{ fontFamily: "var(--font-body)" }}>
+      <main className="flex-1 min-w-0 p-8 pt-24 text-[#F5F1E8] md:pt-8" style={{ fontFamily: "var(--font-body)" }}>
         <UsageWidget />
         <CreditsWidget />
         <SupportChatWidget />
