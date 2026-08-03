@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
 
 type Message = {
   role: "user" | "assistant";
@@ -80,6 +81,10 @@ function formatMessage(text: string) {
   return blocks;
 }
 
+
+function mentionsBilling(text: string) {
+  return /plan pro|abonnement|facturation|credits prepayes|cr[ée]dits pr[ée]pay[ée]s|passer au pro/i.test(text);
+}
 
 export default function SupportChatWidget() {
   const [open, setOpen] = useState(false);
@@ -205,6 +210,22 @@ export default function SupportChatWidget() {
                   }
                 >
                   {m.role === "assistant" ? formatMessage(m.content) : m.content}
+                  {m.role === "assistant" && mentionsBilling(m.content) && (
+                    <div className="mt-2 flex gap-2">
+                      <Link
+                        href="/pricing"
+                        className="rounded-sm border border-blue-400/40 px-2 py-1 text-[11px] text-blue-200 hover:bg-blue-500/10"
+                      >
+                        Voir les plans
+                      </Link>
+                      <Link
+                        href="/billing"
+                        className="rounded-sm border border-blue-400/40 px-2 py-1 text-[11px] text-blue-200 hover:bg-blue-500/10"
+                      >
+                        Gerer mon abonnement
+                      </Link>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
