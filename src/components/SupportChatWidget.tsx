@@ -99,8 +99,15 @@ export default function SupportChatWidget() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, open]);
 
-  async function sendMessage() {
-    const text = input.trim();
+  const SUGGESTIONS = [
+    "Comment ça marche ZOVO ?",
+    "Combien de crédits il me reste ?",
+    "Quel est mon plan actuel ?",
+    "Comment exporter mon projet ?",
+  ];
+
+  async function sendMessage(override?: string) {
+    const text = (override ?? input).trim();
     if (!text || loading) return;
 
     const nextMessages: Message[] = [...messages, { role: "user", content: text }];
@@ -174,6 +181,20 @@ export default function SupportChatWidget() {
           </div>
 
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4 text-[13px] leading-relaxed">
+            {messages.length === 1 && (
+              <div className="flex flex-wrap gap-2 pb-1">
+                {SUGGESTIONS.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => sendMessage(s)}
+                    disabled={loading}
+                    className="rounded-sm border border-blue-400/30 bg-blue-500/5 px-2.5 py-1.5 text-left text-[12px] text-blue-200 transition hover:border-blue-300 hover:bg-blue-500/10 disabled:opacity-40"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div
@@ -215,7 +236,7 @@ export default function SupportChatWidget() {
               className="max-h-24 flex-1 resize-none rounded-sm border border-blue-400/20 bg-[#0b1220] px-3 py-2 text-sm text-blue-50 placeholder:text-blue-400/40 focus:border-blue-300 focus:outline-none"
             />
             <button
-              onClick={sendMessage}
+              onClick={() => sendMessage()}
               disabled={loading || !input.trim()}
               aria-label="Envoyer"
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-blue-400/40 text-blue-300 transition hover:border-blue-300 hover:text-blue-200 disabled:opacity-30"
