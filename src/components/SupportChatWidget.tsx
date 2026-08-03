@@ -125,6 +125,37 @@ export default function SupportChatWidget() {
     "Comment exporter mon projet ?",
   ];
 
+  const [escalating, setEscalating] = useState(false);
+  const [escalated, setEscalated] = useState(false);
+
+  async function escalateToHuman() {
+    if (escalating || escalated) return;
+    setEscalating(true);
+    try {
+      const res = await fetch("/api/support-escalate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages }),
+      });
+      if (res.ok) {
+        setEscalated(true);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: "Ta demande a ete transmise a notre equipe. On te repond par email sous peu.",
+          },
+        ]);
+      } else {
+        setError("Impossible de transmettre ta demande. Reessaie dans un instant.");
+      }
+    } catch {
+      setError("Impossible de transmettre ta demande. Reessaie dans un instant.");
+    } finally {
+      setEscalating(false);
+    }
+  }
+
   async function sendMessage(override?: string) {
     const text = (override ?? input).trim();
     if (!text || loading) return;
@@ -188,6 +219,13 @@ export default function SupportChatWidget() {
               </span>
               <span className="text-sm text-blue-100">Assistant technique</span>
             </div>
+            <button
+              onClick={escalateToHuman}
+              disabled={escalating || escalated}
+              className="mr-2 rounded-sm border border-blue-400/30 px-2 py-1 text-[10px] text-blue-300 hover:bg-blue-500/10 disabled:opacity-40"
+            >
+              {escalated ? "Transmis" : escalating ? "..." : "Parler a un humain"}
+            </button>
             <button
               onClick={() => setOpen(false)}
               aria-label="Fermer le support"
