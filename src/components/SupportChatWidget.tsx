@@ -86,6 +86,10 @@ function mentionsBilling(text: string) {
   return /plan pro|abonnement|facturation|credits prepayes|cr[ée]dits pr[ée]pay[ée]s|passer au pro/i.test(text);
 }
 
+function mentionsUrgency(text: string) {
+  return /\bbug\b|erreur|ne fonctionne pas|ne marche pas|plante|crash|bloque|probleme/i.test(text);
+}
+
 export default function SupportChatWidget() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
@@ -283,6 +287,15 @@ export default function SupportChatWidget() {
                   }
                 >
                   {m.role === "assistant" ? formatMessage(m.content) : m.content}
+                  {m.role === "user" && mentionsUrgency(m.content) && (
+                    <button
+                      onClick={escalateToHuman}
+                      disabled={escalating || escalated}
+                      className="mt-2 rounded-sm border border-[#C9A227]/40 px-2 py-1 text-[11px] text-[#E8C34A] hover:bg-[#C9A227]/10 disabled:opacity-40"
+                    >
+                      Parler a un humain de cette situation
+                    </button>
+                  )}
                   {m.role === "assistant" && mentionsBilling(m.content) && (
                     <div className="mt-2 flex gap-2">
                       <Link
