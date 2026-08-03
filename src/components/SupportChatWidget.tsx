@@ -217,13 +217,29 @@ export default function SupportChatWidget() {
 
       {open && (
         <div className="flex h-[420px] w-[300px] flex-col overflow-hidden rounded-sm border border-[#C9A227]/30 bg-[#0A0A0C] shadow-2xl">
-          <div className="flex items-center justify-between border-b border-[#C9A227]/20 bg-[#16161A] px-4 py-3">
+          <div className="flex items-center justify-between gap-2 border-b border-[#C9A227]/20 bg-[#16161A] px-4 py-3">
             <div className="flex flex-col">
               <span className="text-[10px] uppercase tracking-[0.2em] text-[#C9A227]/70">
                 ZOVO — Support
               </span>
               <span className="text-sm text-[#F5F1E8]">Assistant technique</span>
             </div>
+            <button
+              onClick={() => {
+                setMessages([
+                  {
+                    role: "assistant",
+                    content:
+                      "Bonjour. Je suis l'assistant ZOVO — pose-moi une question sur le Builder, ton compte ou ton abonnement.",
+                  },
+                ]);
+                setEscalated(false);
+                setError(null);
+              }}
+              className="mr-2 rounded-sm border border-[#C9A227]/30 px-2 py-1 text-[10px] text-[#E8C34A] hover:bg-[#C9A227]/10"
+            >
+              Nouvelle conversation
+            </button>
             <button
               onClick={escalateToHuman}
               disabled={escalating || escalated}
