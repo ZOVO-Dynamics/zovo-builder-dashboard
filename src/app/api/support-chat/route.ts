@@ -9,6 +9,23 @@ interface ChatMessage {
   content: string;
 }
 
+export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ messages: [] });
+  }
+
+  const history = await prisma.supportMessage.findMany({
+    where: { userId: session.user.id },
+    orderBy: { createdAt: "asc" },
+    take: 50,
+  });
+
+  return NextResponse.json({
+    messages: history.map((h) => ({ role: h.role, content: h.content })),
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const ip = getClientIp(req);
@@ -84,6 +101,17 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await response.json();
+
+    if (session?.user?.id) {
+      const lastUserMessage = messages[messages.length - 1];
+      await prisma.supportMessage.createMany({
+        data: [
+          { userId: session.user.id, role: "user", content: lastUserMessage.content },
+          { userId: session.user.id, role: "assistant", content: data.response ?? "" },
+        ],
+      });
+    }
+
     return NextResponse.json({ response: data.response, provider: data.provider });
   } catch (err) {
     console.error("support-chat: unexpected error", err);

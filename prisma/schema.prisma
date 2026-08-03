@@ -33,6 +33,7 @@ model User {
   entitlement        UserEntitlement?
   creditsBalance     Int                 @default(0)
   creditTransactions CreditTransaction[]
+  supportMessages    SupportMessage[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -277,4 +278,17 @@ model PlanPrice {
   stripePriceId   String           @unique
   isDefault       Boolean          @default(false)
   createdAt       DateTime         @default(now())
+}
+
+model SupportMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  role      String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
 }
