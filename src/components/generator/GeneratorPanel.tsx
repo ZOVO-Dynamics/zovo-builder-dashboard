@@ -26,19 +26,83 @@ export default function GeneratorPanel() {
   const [progressLabel, setProgressLabel] = useState("");
   const [result, setResult] = useState<BlueprintResult | null>(null);
   const [progressPercent, setProgressPercent] = useState<number | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const lastEffectivePromptRef = useRef<string>("");
+  const notifiedMilestonesRef = useRef<{ [key: string]: Set<number> }>({
+    generation: new Set(),
+    preview: new Set(),
+    deploy: new Set(),
+  });
+
+  function playNotifSound() {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscillator.frequency.value = 880;
+      gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.3);
+    } catch {
+      // audio non disponible, on ignore silencieusement
+    }
+  }
+
+  function notifyMilestone(kind: "generation" | "preview" | "deploy", percent: number, label: string) {
+    const milestones = [25, 50, 75, 100];
+    const reached = milestones.filter((m) => percent >= m && !notifiedMilestonesRef.current[kind].has(m));
+    if (reached.length === 0) return;
+    reached.forEach((m) => notifiedMilestonesRef.current[kind].add(m));
+    const topMilestone = Math.max(...reached);
+    setToastMessage(`${label} : ${topMilestone}%`);
+    playNotifSound();
+    setTimeout(() => setToastMessage(null), 3500);
+  }
   const [deployLoading, setDeployLoading] = useState(false);
   const [deployLabel, setDeployLabel] = useState<string | null>(null);
+  const [deployPercent, setDeployPercent] = useState<number | null>(null);
   const [deployUrl, setDeployUrl] = useState<string | null>(null);
   const [deployError, setDeployError] = useState<string | null>(null);
   const deployPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewLabel, setPreviewLabel] = useState("");
+  const [previewPercent, setPreviewPercent] = useState<number | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>("new");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const previewPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [stuckJob, setStuckJob] = useState<{ jobId: string; prompt: string; projectId: string | null } | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [pendingBlueprint, setPendingBlueprint] = useState<Record<string, unknown> | null>(null);
+  const [pendingFeatures, setPendingFeatures] = useState<string[]>([]);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+
+  const ALL_FEATURES: { key: string; label: string }[] = [
+    { key: "authentication", label: "Authentification (connexion/inscription)" },
+    { key: "dashboard", label: "Tableau de bord" },
+    { key: "database", label: "Base de données" },
+    { key: "api", label: "API personnalisee" },
+    { key: "crud", label: "Gestion create/read/update/delete" },
+    { key: "payments", label: "Paiements (Stripe)" },
+    { key: "notifications", label: "Notifications" },
+    { key: "search", label: "Recherche/filtrage" },
+    { key: "chat", label: "Messagerie/chat" },
+    { key: "admin", label: "Panneau admin" },
+    { key: "profile", label: "Profil utilisateur" },
+    { key: "email", label: "Emails transactionnels" },
+    { key: "analytics", label: "Analytique/statistiques d'usage" },
+  ];
+
+  function toggleFeature(key: string) {
+    setPendingFeatures((prev) =>
+      prev.includes(key) ? prev.filter((f) => f !== key) : [...prev, key]
+    );
+  }
 
   useEffect(() => {
     fetch("/api/projects")
@@ -48,35 +112,40 @@ export default function GeneratorPanel() {
   }, [result]);
 
   useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-      if (previewPollRef.current) clearInterval(previewPollRef.current);
-    };
+    fetch("/api/blueprint/stuck")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.stuck) {
+          setStuckJob({ jobId: data.jobId, prompt: data.prompt, projectId: data.projectId });
+        }
+      })
+      .catch(() => {});
   }, []);
 
-  const projectId = result?.projectPath ? result.projectPath.split("/").pop() : null;
-
-  async function handleGenerate() {
-    if (!prompt.trim()) return;
+  async function handleResume() {
+    if (!stuckJob) return;
+    setPrompt(stuckJob.prompt);
+    if (stuckJob.projectId) setSelectedProject(stuckJob.projectId);
+    setStuckJob(null);
     setLoading(true);
     setResult(null);
     setPreviewUrl(null);
     setPreviewError(null);
-    setProgressLabel("Démarrage de la génération...");
+    setProgressLabel("Reprise de la génération...");
 
     try {
       const res = await fetch("/api/blueprint", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt,
-          projectId: selectedProject !== "new" ? selectedProject : undefined,
+          prompt: stuckJob.prompt,
+          projectId: stuckJob.projectId || undefined,
         }),
       });
       const data = await res.json();
 
       if (!res.ok || !data.success || !data.jobId) {
-        setResult({ success: false, error: data.error || "Impossible de démarrer la génération" });
+        setResult({ success: false, error: data.error || "Impossible de reprendre la génération" });
         setLoading(false);
         return;
       }
@@ -99,9 +168,125 @@ export default function GeneratorPanel() {
           const statusData = await statusRes.json();
 
           if (statusData.progress?.total) {
-            setProgressPercent(
-              Math.round((statusData.progress.current / statusData.progress.total) * 100)
-            );
+            const __genPct = Math.round((statusData.progress.current / statusData.progress.total) * 100);
+            setProgressPercent(__genPct);
+            notifyMilestone("generation", __genPct, "Génération");
+          }
+
+          if (statusData.status === "completed") {
+            if (pollRef.current) clearInterval(pollRef.current);
+            setResult(statusData.result);
+            setLoading(false);
+            setProgressPercent(null);
+          } else if (statusData.status === "failed") {
+            if (pollRef.current) clearInterval(pollRef.current);
+            setResult({ success: false, error: statusData.error || "La génération a échoué" });
+            setLoading(false);
+            setProgressPercent(null);
+          }
+        } catch {
+          // On continue le polling
+        }
+      }, 3000);
+    } catch (err: unknown) {
+      setResult({ success: false, error: err instanceof Error ? err.message : String(err) });
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (previewPollRef.current) clearInterval(previewPollRef.current);
+    };
+  }, []);
+
+  const projectId = result?.projectPath ? result.projectPath.split("/").pop() : null;
+
+  async function handleAnalyze() {
+    const effectivePrompt = prompt.trim() || "Continue la génération de ce projet, corrige les erreurs et complète les fonctionnalités manquantes.";
+    if (!effectivePrompt) return;
+    lastEffectivePromptRef.current = effectivePrompt;
+    setAnalyzing(true);
+    setAnalyzeError(null);
+    setPendingBlueprint(null);
+    setResult(null);
+
+    try {
+      const res = await fetch("/api/blueprint/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: effectivePrompt }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setAnalyzeError(data.error || "Impossible d'analyser le prompt");
+        setAnalyzing(false);
+        return;
+      }
+
+      setPendingBlueprint(data.blueprint);
+      setPendingFeatures(data.blueprint.features || []);
+      setAnalyzing(false);
+    } catch (err: unknown) {
+      setAnalyzeError(err instanceof Error ? err.message : String(err));
+      setAnalyzing(false);
+    }
+  }
+
+
+  async function handleConfirmGenerate() {
+    if (!pendingBlueprint) return;
+    setLoading(true);
+    setResult(null);
+    setPreviewUrl(null);
+    setPreviewError(null);
+    notifiedMilestonesRef.current.generation = new Set();
+    setProgressLabel("Démarrage de la génération...");
+
+    const finalBlueprint = { ...pendingBlueprint, features: pendingFeatures };
+
+    try {
+      const res = await fetch("/api/blueprint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: lastEffectivePromptRef.current || prompt,
+          projectId: selectedProject !== "new" ? selectedProject : undefined,
+          blueprint: finalBlueprint,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success || !data.jobId) {
+        setResult({ success: false, error: data.error || "Impossible de démarrer la génération" });
+        setLoading(false);
+        return;
+      }
+
+      const jobId = data.jobId;
+      let elapsed = 0;
+      setPendingBlueprint(null);
+
+      pollRef.current = setInterval(async () => {
+        elapsed += 3;
+        setProgressLabel(
+          elapsed < 20
+            ? "Analyse du prompt..."
+            : elapsed < 45
+            ? "Génération des fichiers..."
+            : "Validation du projet..."
+        );
+
+        try {
+          const statusRes = await fetch(`/api/blueprint/status/${jobId}`);
+          const statusData = await statusRes.json();
+
+          if (statusData.progress?.total) {
+            const __genPct = Math.round((statusData.progress.current / statusData.progress.total) * 100);
+            setProgressPercent(__genPct);
+            notifyMilestone("generation", __genPct, "Génération");
           }
 
           if (statusData.status === "completed") {
@@ -131,6 +316,9 @@ export default function GeneratorPanel() {
     setDeployError(null);
     setDeployUrl(null);
     setDeployLabel("Envoi vers Vercel...");
+    notifiedMilestonesRef.current.deploy = new Set();
+    setDeployPercent(10);
+    notifyMilestone("deploy", 10, "Déploiement");
 
     try {
       const res = await fetch(`/api/deploy/${projectId}`, { method: "POST" });
@@ -138,6 +326,7 @@ export default function GeneratorPanel() {
       if (!res.ok || data.success === false) {
         setDeployError(data.error || "Impossible de lancer le deploiement");
         setDeployLoading(false);
+        setDeployPercent(null);
         return;
       }
 
@@ -146,16 +335,25 @@ export default function GeneratorPanel() {
           const statusRes = await fetch(`/api/deploy/${projectId}`);
           const statusData = await statusRes.json();
 
-          if (statusData.status === "building" || statusData.status === "queued") {
+          if (statusData.status === "queued") {
+            setDeployLabel("En file d'attente...");
+            setDeployPercent(30);
+            notifyMilestone("deploy", 30, "Déploiement");
+          } else if (statusData.status === "building") {
             setDeployLabel("Construction en cours...");
+            setDeployPercent(65);
+            notifyMilestone("deploy", 65, "Déploiement");
           } else if (statusData.status === "ready") {
             if (deployPollRef.current) clearInterval(deployPollRef.current);
+            setDeployPercent(100);
+            notifyMilestone("deploy", 100, "Déploiement");
             setDeployUrl(statusData.url);
             setDeployLoading(false);
           } else if (statusData.status === "error") {
             if (deployPollRef.current) clearInterval(deployPollRef.current);
             setDeployError(statusData.error || "Erreur de deploiement");
             setDeployLoading(false);
+            setDeployPercent(null);
           }
         } catch {
           // erreur reseau ponctuelle, on continue le polling
@@ -173,6 +371,9 @@ export default function GeneratorPanel() {
     setPreviewError(null);
     setPreviewUrl(null);
     setPreviewLabel("Démarrage...");
+    notifiedMilestonesRef.current.preview = new Set();
+    setPreviewPercent(10);
+    notifyMilestone("preview", 10, "Preview");
 
     try {
       const res = await fetch(`/api/preview/${projectId}`, { method: "POST" });
@@ -180,6 +381,7 @@ export default function GeneratorPanel() {
       if (!res.ok || data.success === false) {
         setPreviewError(data.error || "Impossible de demarrer la preview");
         setPreviewLoading(false);
+        setPreviewPercent(null);
         return;
       }
 
@@ -190,16 +392,23 @@ export default function GeneratorPanel() {
 
           if (statusData.status === "installing") {
             setPreviewLabel("Installation des dépendances...");
+            setPreviewPercent(40);
+            notifyMilestone("preview", 40, "Preview");
           } else if (statusData.status === "starting") {
             setPreviewLabel("Démarrage du serveur...");
+            setPreviewPercent(75);
+            notifyMilestone("preview", 75, "Preview");
           } else if (statusData.status === "ready") {
             if (previewPollRef.current) clearInterval(previewPollRef.current);
+            setPreviewPercent(100);
+            notifyMilestone("preview", 100, "Preview");
             setPreviewUrl(`/api/preview-proxy/${projectId}`);
             setPreviewLoading(false);
           } else if (statusData.status === "error") {
             if (previewPollRef.current) clearInterval(previewPollRef.current);
             setPreviewError(statusData.error || "Erreur au démarrage de la preview");
             setPreviewLoading(false);
+            setPreviewPercent(null);
           }
         } catch {
           // erreur réseau ponctuelle, on continue le polling
@@ -218,10 +427,30 @@ export default function GeneratorPanel() {
 
   return (
     <div className="rounded-lg border border-[#2A2A2E] bg-[#16161A] p-6 space-y-4">
+      {toastMessage && (
+        <div className="fixed top-4 right-4 z-50 rounded-lg bg-[#16161A] border border-[#C9A227] px-4 py-3 shadow-lg text-sm font-medium text-[#F5F1E8] animate-in fade-in slide-in-from-top-2">
+          {toastMessage}
+        </div>
+      )}
       <div>
         <span style={{ fontFamily: "var(--font-mono)" }} className="text-xs text-[#E8C34A]">GENERATEUR</span>
         <h2 style={{ fontFamily: "var(--font-display)" }} className="mt-1 text-lg font-bold">Generer une application</h2>
       </div>
+
+      {stuckJob && (
+        <div className="rounded-lg border border-amber-700/60 bg-amber-950/40 p-3 space-y-2">
+          <p className="text-sm text-amber-300">
+            Une generation precedente semble incomplete ou echouee.
+          </p>
+          <button
+            onClick={handleResume}
+            disabled={loading}
+            className="rounded-md bg-[#C9A227] hover:bg-[#E8C34A] disabled:opacity-40 px-4 py-2 text-sm font-medium text-[#0A0A0C]"
+          >
+            Reprendre la generation
+          </button>
+        </div>
+      )}
 
       {projects.length > 0 && (
         <div>
@@ -256,14 +485,54 @@ export default function GeneratorPanel() {
       />
 
       <button
-        onClick={handleGenerate}
-        disabled={loading || !prompt.trim()}
+        onClick={handleAnalyze}
+        disabled={analyzing || loading}
         className="rounded-md bg-[#C9A227] hover:bg-[#E8C34A] disabled:bg-[#2A2A2E] disabled:cursor-not-allowed px-4 py-2 text-sm font-medium text-[#0A0A0C]"
       >
-        {loading
+        {analyzing
+          ? "Analyse du prompt..."
+          : loading
           ? `${progressLabel || "Generation en cours..."}${progressPercent !== null ? ` (${progressPercent}%)` : ""}`
-          : "Generer"}
+          : prompt.trim()
+          ? "Analyser"
+          : "Reprendre la Génération"}
       </button>
+
+      {analyzeError && (
+        <div className="rounded-lg bg-red-950/40 border border-red-800/60 p-3 text-sm text-red-300">
+          {analyzeError}
+        </div>
+      )}
+
+      {pendingBlueprint && (
+        <div className="rounded-lg border border-[#C9A227]/40 bg-[#0A0A0C] p-4 space-y-3">
+          <p className="text-sm text-[#9B9B95]">
+            Fonctionnalites detectees pour <strong className="text-[#F5F1E8]">{String(pendingBlueprint.projectName ?? "")}</strong> — decoche celles que tu ne veux pas :
+          </p>
+          <div className="space-y-2">
+            {ALL_FEATURES.map((feature) => (
+              <label key={feature.key} className="flex items-center gap-2 text-sm text-[#D8CBA3]">
+                <input
+                  type="checkbox"
+                  checked={pendingFeatures.includes(feature.key)}
+                  onChange={() => toggleFeature(feature.key)}
+                  className="accent-[#C9A227]"
+                />
+                {feature.label}
+              </label>
+            ))}
+          </div>
+          <button
+            onClick={handleConfirmGenerate}
+            disabled={loading}
+            className="w-full rounded-md bg-[#C9A227] hover:bg-[#E8C34A] disabled:bg-[#2A2A2E] disabled:cursor-not-allowed px-4 py-2 text-sm font-medium text-[#0A0A0C]"
+          >
+            {loading
+              ? `${progressLabel || "Generation en cours..."}${progressPercent !== null ? ` (${progressPercent}%)` : ""}`
+              : "Confirmer et generer"}
+          </button>
+        </div>
+      )}
 
       {result && !result.success && (
         <div className="rounded-lg bg-red-950/40 border border-red-800/60 p-3 text-sm text-red-300">
@@ -313,7 +582,7 @@ export default function GeneratorPanel() {
               disabled={previewLoading}
               className="rounded-md border border-[#C9A227]/60 text-[#E8C34A] hover:bg-[#C9A227]/10 disabled:opacity-40 px-4 py-2 text-sm font-medium"
             >
-              {previewLoading ? (previewLabel || "Demarrage...") : "Preview"}
+              {previewLoading ? `${previewLabel || "Demarrage..."}${previewPercent !== null ? ` (${previewPercent}%)` : ""}` : "Preview"}
             </button>
             <button
               onClick={handleExport}
@@ -326,7 +595,7 @@ export default function GeneratorPanel() {
               disabled={deployLoading}
               className="rounded-md border border-[#C9A227]/60 text-[#E8C34A] hover:bg-[#C9A227]/10 disabled:opacity-40 px-4 py-2 text-sm font-medium"
             >
-              {deployLoading ? (deployLabel || "Deploiement...") : "ZOVO Deploy"}
+              {deployLoading ? `${deployLabel || "Deploiement..."}${deployPercent !== null ? ` (${deployPercent}%)` : ""}` : "ZOVO Deploy"}
             </button>
           </div>
 

@@ -1,3 +1,5 @@
+import { computeComplexityTier, ComplexityTier } from "./ComplexityAnalyzer";
+
 export interface ProjectBlueprint {
   projectType: string;
   projectName: string;
@@ -7,6 +9,7 @@ export interface ProjectBlueprint {
   database: string;
   authentication: boolean;
   deployment: string;
+  complexityTier?: ComplexityTier;
 }
 
 export class PromptAnalyzer {
@@ -56,7 +59,8 @@ export class PromptAnalyzer {
         ? "postgresql"
         : "none",
       authentication: features.includes("authentication"),
-      deployment: "cloudflare"
+      deployment: "cloudflare",
+      complexityTier: computeComplexityTier(features)
     };
   }
 }

@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       .join("");
 
     const { error } = await resend.emails.send({
-      from: "ZOVO Support <notifications@zovo.ca>",
+      from: "ZOVO Support <support@zovo.ca>",
       to: "notifications@zovo.ca",
       replyTo: session.user.email,
       subject: `Escalade support - ${session.user.email}`,
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     });
 
     resend.emails.send({
-      from: "ZOVO Support <notifications@zovo.ca>",
+      from: "ZOVO Support <support@zovo.ca>",
       to: session.user.email,
       subject: "Ta demande a bien ete transmise",
       html: `

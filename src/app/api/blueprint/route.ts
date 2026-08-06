@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import aiPromptAnalyzer from "@/core/AIPromptAnalyzer";
+import promptAnalyzer from "@/core/PromptAnalyzer";
 import blueprintGenerator from "@/core/BlueprintGenerator";
 import projectWriter from "@/core/ProjectWriter";
 import validator from "@/core/Validator";
@@ -25,19 +26,43 @@ async function runGenerationJob(
       ? `Contexte du projet existant : ${existingProject.name}. Historique : ${existingProject.currentVersion} version(s) précédente(s).\n\nNouvelle demande : ${prompt}`
       : prompt;
 
-    const projectBlueprint = await aiPromptAnalyzer.analyze(effectivePrompt);
-    const buildBlueprint = blueprintGenerator.generate(projectBlueprint);
-    const { projectPath, filesCreated, fallbackFiles } = await projectWriter.write(
-      buildBlueprint,
-      projectBlueprint,
-      prompt,
-      async (current, total) => {
-        await prisma.generationJob.update({
-          where: { id: jobId },
-          data: { result: { progress: { current, total } } as never },
-        });
-      }
-    );
+    const isRepairMode =
+      Boolean(existingProject) &&
+      prompt.trim().startsWith("Continue la génération de ce projet");
+
+    let projectPath: string;
+    let filesCreated: string[] = [];
+    let fallbackFiles: string[] = [];
+    let projectBlueprint;
+    let buildBlueprint;
+
+    if (isRepairMode && existingProject) {
+      // Mode réparation : on ne réécrit rien, on valide/corrige directement les fichiers existants
+      projectPath = existingProject.projectPath;
+      projectBlueprint = await aiPromptAnalyzer.analyze(effectivePrompt);
+      buildBlueprint = blueprintGenerator.generate(projectBlueprint);
+      await prisma.generationJob.update({
+        where: { id: jobId },
+        data: { result: { progress: { current: 1, total: 1 } } as never },
+      });
+    } else {
+      projectBlueprint = await aiPromptAnalyzer.analyze(effectivePrompt);
+      buildBlueprint = blueprintGenerator.generate(projectBlueprint);
+      const writeResult = await projectWriter.write(
+        buildBlueprint,
+        projectBlueprint,
+        prompt,
+        async (current, total) => {
+          await prisma.generationJob.update({
+            where: { id: jobId },
+            data: { result: { progress: { current, total } } as never },
+          });
+        }
+      );
+      projectPath = writeResult.projectPath;
+      filesCreated = writeResult.filesCreated;
+      fallbackFiles = writeResult.fallbackFiles;
+    }
 
     const validation = await validator.validate(projectPath, prompt, 2);
 
@@ -145,22 +170,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
     }
 
-    const entitlement = await checkGenerationEntitlement(user.id);
-
-    if (!entitlement.allowed) {
-      return NextResponse.json(
-        {
-          error: entitlement.reason || "Génération non autorisée",
-          message: entitlement.reason === "Limite de générations atteinte pour cette période"
-            ? `Vous avez utilisé ${entitlement.cap} générations pour cette période. Passez au plan supérieur ou attendez le prochain cycle.`
-            : "Abonnez-vous à un plan ZOVO Builder pour générer des applications.",
-          remaining: entitlement.remaining,
-          cap: entitlement.cap,
-        },
-        { status: 429 }
-      );
-    }
-
     const { prompt, projectId } = await req.json();
 
     if (!prompt || typeof prompt !== "string") {
@@ -171,11 +180,46 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Prompt trop long (max 2000 caractères)" }, { status: 400 });
     }
 
+    let existingProject = null;
     if (projectId) {
-      const existingProject = await prisma.project.findUnique({ where: { id: projectId } });
+      existingProject = await prisma.project.findUnique({ where: { id: projectId } });
       if (!existingProject || existingProject.userId !== user.id) {
         return NextResponse.json({ error: "Projet introuvable ou accès refusé" }, { status: 403 });
       }
+    }
+
+    // Pré-calcul rapide (mots-clés, synchrone) du tier de complexité pour l'entitlement.
+    // L'analyse IA précise (dans runGenerationJob) reste la source de vérité pour le blueprint final.
+    const quickBlueprint = promptAnalyzer.analyze(prompt);
+
+    const entitlement = await checkGenerationEntitlement(user.id, quickBlueprint.complexityTier);
+
+    if (!entitlement.allowed) {
+      return NextResponse.json(
+        {
+          error: entitlement.reason || "Génération non autorisée",
+          message:
+            entitlement.reason === "Ce projet nécessite un abonnement Pro ou le Pack Premium"
+              ? "Ce type de projet (authentification, paiements, chat ou admin) nécessite un abonnement Pro ou le Pack Premium."
+              : entitlement.reason === "Limite de générations atteinte pour cette période"
+              ? `Vous avez utilisé ${entitlement.cap} générations pour cette période. Passez au plan supérieur ou attendez le prochain cycle.`
+              : "Abonnez-vous à un plan ZOVO Builder pour générer des applications.",
+          remaining: entitlement.remaining,
+          cap: entitlement.cap,
+        },
+        { status: 429 }
+      );
+    }
+
+    // Limite plan gratuit : pas de régénération sur un projet existant, Pro illimité.
+    if (existingProject && existingProject.currentVersion >= 1 && !entitlement.isPro) {
+      return NextResponse.json(
+        {
+          error: "Régénération réservée aux abonnés Pro",
+          message: "Le plan gratuit ne permet pas de régénérer un projet existant. Passez à Pro pour itérer sur vos projets.",
+        },
+        { status: 403 }
+      );
     }
 
     const job = await prisma.generationJob.create({

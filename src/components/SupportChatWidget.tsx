@@ -103,6 +103,7 @@ export default function SupportChatWidget() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [feedback, setFeedback] = useState<Record<number, "up" | "down">>({});
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -310,6 +311,24 @@ export default function SupportChatWidget() {
                       >
                         Gerer mon abonnement
                       </Link>
+                    </div>
+                  )}
+                  {m.role === "assistant" && i > 0 && (
+                    <div className="mt-1.5 flex gap-1.5">
+                      <button
+                        onClick={() => setFeedback((prev) => ({ ...prev, [i]: "up" }))}
+                        className={`text-xs ${feedback[i] === "up" ? "opacity-100" : "opacity-40 hover:opacity-70"}`}
+                        aria-label="Reponse utile"
+                      >
+                        👍
+                      </button>
+                      <button
+                        onClick={() => setFeedback((prev) => ({ ...prev, [i]: "down" }))}
+                        className={`text-xs ${feedback[i] === "down" ? "opacity-100" : "opacity-40 hover:opacity-70"}`}
+                        aria-label="Reponse peu utile"
+                      >
+                        👎
+                      </button>
                     </div>
                   )}
                 </div>

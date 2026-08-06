@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
+import type { ComplexityTier } from "@/core/ComplexityAnalyzer";
 
 export interface EntitlementCheck {
   allowed: boolean;
@@ -7,6 +8,7 @@ export interface EntitlementCheck {
   remaining?: number;
   cap?: number;
   source?: "subscription" | "credits";
+  isPro?: boolean;
 }
 
 /**
@@ -29,9 +31,14 @@ function getCurrentPeriod(billingInterval: string, referenceStart: Date): { star
  * Vérifie si un utilisateur peut lancer une nouvelle génération.
  * Priorité : abonnement actif (logique existante, inchangée) ;
  * sinon, solde de crédits prépayés.
+ * Si complexityTier est fourni et vaut "complexe", bloque les utilisateurs
+ * sans abonnement Pro actif (levier de conversion).
  * TOUJOURS appelé côté serveur avant de lancer une génération.
  */
-export async function checkGenerationEntitlement(userId: string): Promise<EntitlementCheck> {
+export async function checkGenerationEntitlement(
+  userId: string,
+  complexityTier?: ComplexityTier
+): Promise<EntitlementCheck> {
   const subscription = await prisma.subscription.findUnique({
     where: { userId },
     include: { plan: true, usageLimits: true },
@@ -40,6 +47,17 @@ export async function checkGenerationEntitlement(userId: string): Promise<Entitl
   const hasActiveSubscription =
     subscription && subscription.status === "active" && subscription.plan &&
     !(subscription.currentPeriodEnd && subscription.currentPeriodEnd < new Date());
+
+  // Levier de conversion : un projet complexe (auth/payments/chat/admin) nécessite
+  // un abonnement Pro actif, peu importe le solde de crédits ou générations restantes.
+  if (complexityTier === "complexe" && !hasActiveSubscription) {
+    return {
+      allowed: false,
+      reason: "Ce projet nécessite un abonnement Pro ou le Pack Premium",
+      source: "credits",
+      isPro: false,
+    };
+  }
 
   if (hasActiveSubscription) {
     const now = new Date();
@@ -79,10 +97,11 @@ export async function checkGenerationEntitlement(userId: string): Promise<Entitl
         remaining: 0,
         cap: usageLimit.generationsCap,
         source: "subscription",
+        isPro: true,
       };
     }
 
-    return { allowed: true, remaining, cap: usageLimit.generationsCap, source: "subscription" };
+    return { allowed: true, remaining, cap: usageLimit.generationsCap, source: "subscription", isPro: true };
   }
 
   // Pas d'abonnement actif : on vérifie le solde de crédits prépayés
@@ -94,10 +113,11 @@ export async function checkGenerationEntitlement(userId: string): Promise<Entitl
       reason: "Solde de crédits insuffisant",
       remaining: user?.creditsBalance ?? 0,
       source: "credits",
+      isPro: false,
     };
   }
 
-  return { allowed: true, remaining: user.creditsBalance, source: "credits" };
+  return { allowed: true, remaining: user.creditsBalance, source: "credits", isPro: false };
 }
 
 /**

@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 
 const VERCEL_API = "https://api.vercel.com";
+const VERCEL_TEAM_ID = "team_SJ99FYgfihgee0KvMsZvBPA3";
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
 
 const EXCLUDED_DIRS = new Set(["node_modules", ".next", ".git"]);
@@ -49,7 +50,7 @@ class DeployManager {
 
     const deployName = safeName.toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 50);
 
-    const response = await fetch(`${VERCEL_API}/v13/deployments`, {
+    const response = await fetch(`${VERCEL_API}/v13/deployments?teamId=${VERCEL_TEAM_ID}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${VERCEL_TOKEN}`,
@@ -89,7 +90,7 @@ class DeployManager {
     }
 
     try {
-      const response = await fetch(`${VERCEL_API}/v13/deployments/${cached.deploymentId}`, {
+      const response = await fetch(`${VERCEL_API}/v13/deployments/${cached.deploymentId}?teamId=${VERCEL_TEAM_ID}`, {
         headers: { Authorization: `Bearer ${VERCEL_TOKEN}` },
       });
       const data = await response.json();
@@ -106,7 +107,7 @@ class DeployManager {
         cached.url = `https://${data.url}`;
       } else if (data.readyState === "ERROR") {
         cached.status = "error";
-        cached.error = "Le déploiement a échoué sur Vercel";
+        cached.error = data?.errorMessage || data?.error?.message || "Le déploiement a échoué sur Vercel (aucun détail fourni par Vercel)";
       } else {
         cached.status = "building";
       }

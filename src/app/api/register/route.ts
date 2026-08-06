@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     });
 
     const { data, error } = await resend.emails.send({
-      from: "ZOVO <notifications@zovo.ca>",
+      from: "ZOVO <support@zovo.ca>",
       to: user.email,
       subject: "Bienvenue sur ZOVO !",
       html: `<p>Bonjour, ton compte ZOVO a bien été créé. Bienvenue à bord !</p>`,

@@ -1,4 +1,5 @@
 import promptAnalyzer, { ProjectBlueprint } from "./PromptAnalyzer";
+import { computeComplexityTier } from "./ComplexityAnalyzer";
 
 const AI_BRIDGE_URL = process.env.AI_BRIDGE_URL || "https://ai.zovo.ca/api/generate";
 
@@ -70,6 +71,7 @@ Demande à analyser : "${prompt}"`;
         database: parsed.database || "none",
         authentication: !!parsed.authentication,
         deployment: parsed.deployment || "cloudflare",
+        complexityTier: computeComplexityTier(parsed.features),
       };
 
     } catch (err) {

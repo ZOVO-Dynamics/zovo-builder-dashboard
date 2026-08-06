@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
 
         if (email) {
           await resend.emails.send({
-            from: "ZOVO <notifications@zovo.ca>",
+            from: "ZOVO <support@zovo.ca>",
             to: email,
             subject: "ZOVO Pro activé",
             html:

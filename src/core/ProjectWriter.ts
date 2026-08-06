@@ -127,7 +127,14 @@ function fallbackContent(file: string, blueprint: BuildBlueprint): string {
     return `# ${blueprint.name}\n\nProjet généré automatiquement par ZOVO Builder.\n\n## Composants\n${blueprint.components.map(c => `- ${c}`).join("\n")}\n\n## Routes\n${blueprint.routes.map(r => `- ${r}`).join("\n")}\n`;
   }
   if (file === "src/app/layout.tsx") {
-    return `import type { Metadata } from "next";\nimport type { ReactNode } from "react";\n\nexport const metadata: Metadata = {\n  title: "${blueprint.name}",\n  description: "Application générée par ZOVO Builder",\n};\n\nexport default function RootLayout({\n  children,\n}: {\n  children: ReactNode;\n}) {\n  return (\n    <html lang="fr">\n      <body>{children}</body>\n    </html>\n  );\n}\n`;
+    const hasAuth = blueprint.components.includes("AuthProvider");
+    const bodyContent = hasAuth
+      ? '<AuthProvider>{children}</AuthProvider>'
+      : '{children}';
+    const authImport = hasAuth
+      ? 'import { AuthProvider } from "@/components/AuthProvider";\n'
+      : '';
+    return `import type { Metadata } from "next";\nimport type { ReactNode } from "react";\n${authImport}\nexport const metadata: Metadata = {\n  title: "${blueprint.name}",\n  description: "Application générée par ZOVO Builder",\n};\n\nexport default function RootLayout({\n  children,\n}: {\n  children: ReactNode;\n}) {\n  return (\n    <html lang="fr">\n      <body>${bodyContent}</body>\n    </html>\n  );\n}\n`;
   }
   if (file === "src/components/AuthProvider.tsx") {
     return `"use client";
