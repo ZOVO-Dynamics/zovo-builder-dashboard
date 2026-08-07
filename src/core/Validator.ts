@@ -1,3 +1,6 @@
+import { runEnvironmentDoctor, runCodeDoctor } from "./Doctor";
+import { extractFileErrors, extractBuildFileErrors } from "./ErrorCollector";
+export { extractFileErrors, extractBuildFileErrors };
 import { execSync } from "child_process";
 import fs from "fs";
 import path from "path";
@@ -46,30 +49,33 @@ function runTypeCheck(projectDir: string): { ok: boolean; output: string } {
   }
 }
 
-export function extractFileErrors(tscOutput: string): Map<string, string[]> {
-  const fileErrors = new Map<string, string[]>();
-  const lines = tscOutput.split("\n");
-
-  for (const line of lines) {
-    const match = line.match(/^(.+?\.tsx?)\(\d+,\d+\):\s*(error.+)$/);
-    if (match) {
-      const [, file, error] = match;
-      const cleanFile = file.trim();
-      if (!fileErrors.has(cleanFile)) {
-        fileErrors.set(cleanFile, []);
-      }
-      fileErrors.get(cleanFile)!.push(error.trim());
-    }
+function runNextBuild(projectDir: string): { ok: boolean; output: string } {
+  try {
+    execSync(
+      `docker run --rm --network=host -v "${projectDir}:/app" -w /app -e DATABASE_URL="${process.env.DATABASE_URL || ""}" node:22 npx prisma generate`,
+      { stdio: "pipe", timeout: 60000 }
+    );
+  } catch {
+    // on laisse next build échouer et remonter l'erreur Prisma si generate échoue encore
   }
-
-  return fileErrors;
+  try {
+    execSync(
+      `docker run --rm --network=host --memory=1g --memory-swap=1g --user "$(id -u):$(id -g)" -v "${projectDir}:/app" -w /app -e DATABASE_URL="${process.env.DATABASE_URL || ""}" node:22 npm run build`,
+      { stdio: "pipe", timeout: 180000 }
+    );
+    return { ok: true, output: "" };
+  } catch (err: unknown) {
+    const e = err as { stdout?: { toString(): string }; stderr?: { toString(): string } };
+    const output = (e.stdout?.toString() || "") + (e.stderr?.toString() || "");
+    return { ok: false, output };
+  }
 }
 
-// Supprime les directives "use client" malformées (sans guillemets, ex: "use client;"
-// au lieu de '"use client";') laissées telles quelles par l'IA — syntaxe invalide en TS
-// qui provoque TS1434 (Unexpected keyword or identifier).
+
+
 function stripMalformedUseClientDirective(projectDir: string): string[] {
   const fixedFiles: string[] = [];
+
   const srcDir = path.join(projectDir, "src");
   if (!fs.existsSync(srcDir)) return fixedFiles;
 
@@ -98,6 +104,7 @@ function stripMalformedUseClientDirective(projectDir: string): string[] {
 }
 
 const REACT_HOOKS_PATTERN = /\b(useState|useEffect|useRef|useReducer|useContext|useMemo|useCallback|useLayoutEffect|useTransition|useDeferredValue|useImperativeHandle|useSyncExternalStore|useId)\s*\(/;
+const CUSTOM_HOOK_PATTERN = /\buse[A-Z]\w*\s*\(/;
 
 function fixMissingUseClientDirective(projectDir: string): string[] {
   const fixedFiles: string[] = [];
@@ -114,7 +121,7 @@ function fixMissingUseClientDirective(projectDir: string): string[] {
         const content = fs.readFileSync(fullPath, "utf-8");
         const trimmed = content.trimStart();
         const alreadyHasDirective = /^["']use client["'];?/.test(trimmed);
-        const usesHooks = REACT_HOOKS_PATTERN.test(content);
+        const usesHooks = REACT_HOOKS_PATTERN.test(content) || CUSTOM_HOOK_PATTERN.test(content);
 
         if (usesHooks && !alreadyHasDirective) {
           const fixed = '"use client";\n\n' + content;
@@ -129,7 +136,51 @@ function fixMissingUseClientDirective(projectDir: string): string[] {
   return fixedFiles;
 }
 
+
+function fixCommonHallucinations(projectDir: string): string[] {
+  const fixedFiles: string[] = [];
+  const srcDir = path.join(projectDir, "src");
+  if (!fs.existsSync(srcDir)) return fixedFiles;
+
+  function walk(dir: string) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules" || entry.name === ".next") continue;
+        walk(fullPath);
+      } else if (/\.(tsx|ts|jsx|js)$/.test(entry.name)) {
+        let content = fs.readFileSync(fullPath, "utf-8");
+        let changed = false;
+
+        if (/from\s+["']next\/router["']/.test(content)) {
+          content = content.replace(/from\s+["']next\/router["']/g, 'from "next/navigation"');
+          changed = true;
+        }
+
+        const unguardedGlobal = /(?<!typeof\s)(?:z\.instanceof\(|:\s*)(FileList|File|Blob)\b/;
+        if (unguardedGlobal.test(content) && !/typeof\s+(FileList|File|Blob)/.test(content)) {
+          content = content.replace(
+            /z\.instanceof\((FileList|File|Blob)\)/g,
+            (_match, cls) =>
+              `z.custom<${cls} | undefined>((val) => val === undefined || (typeof ${cls} !== "undefined" && val instanceof ${cls}), { message: "Fichier invalide" })`
+          );
+          changed = true;
+        }
+
+        if (changed) {
+          fs.writeFileSync(fullPath, content, "utf-8");
+          fixedFiles.push(path.relative(projectDir, fullPath));
+        }
+      }
+    }
+  }
+
+  walk(srcDir);
+  return fixedFiles;
+}
+
 const JSX_RETURN_PATTERN = /return\s*\(\s*<[A-Za-z]|return\s+<[A-Za-z]/;
+
 
 function fixTsFilesContainingJsx(projectDir: string): string[] {
   const fixedFiles: string[] = [];
@@ -157,50 +208,314 @@ function fixTsFilesContainingJsx(projectDir: string): string[] {
   return fixedFiles;
 }
 
+function fixMalformedPrismaSchema(projectDir: string): string[] {
+  const fixedFiles: string[] = [];
+  const schemaPath = path.join(projectDir, "prisma", "schema.prisma");
+  if (!fs.existsSync(schemaPath)) return fixedFiles;
+
+  const content = fs.readFileSync(schemaPath, "utf-8");
+  const lines = content.split("\n");
+  const filtered = lines.filter((line) => !/^\s*generator\s+"[^"]*"\s*$/.test(line));
+
+  if (filtered.length !== lines.length) {
+    const cleaned = filtered.join("\n").replace(/^\n+/, "");
+    fs.writeFileSync(schemaPath, cleaned, "utf-8");
+    fixedFiles.push(path.relative(projectDir, schemaPath));
+  }
+
+  return fixedFiles;
+}
+
+function resolveLocalImport(projectDir: string, fromFile: string, importPath: string): string | null {
+  let basePath: string;
+  if (importPath.startsWith("@/")) {
+    basePath = path.join(projectDir, "src", importPath.slice(2));
+  } else if (importPath.startsWith(".")) {
+    basePath = path.join(path.dirname(fromFile), importPath);
+  } else {
+    return null; // package npm, pas un fichier local
+  }
+
+  const candidates = [
+    basePath,
+    `${basePath}.ts`,
+    `${basePath}.tsx`,
+    `${basePath}/index.ts`,
+    `${basePath}/index.tsx`,
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function isLocalImportPath(importPath: string): boolean {
+  return importPath.startsWith("@/") || importPath.startsWith(".");
+}
+
+// Retourne les chemins d'import locaux (relatifs ou @/) présents dans le contenu qui ne
+// résolvent vers AUCUN fichier réel — signe que l'IA a inventé un module.
+function findInventedLocalImports(projectDir: string, filePath: string, content: string): string[] {
+  const invented: string[] = [];
+  const importMatches = content.matchAll(/from\s+["']([^"']+)["']/g);
+  for (const match of importMatches) {
+    const importPath = match[1];
+    if (!isLocalImportPath(importPath)) continue;
+    const resolved = resolveLocalImport(projectDir, filePath, importPath);
+    if (!resolved) invented.push(importPath);
+  }
+  return [...new Set(invented)];
+}
+
+function readPackageDependencies(projectDir: string): string[] {
+  const pkgPath = path.join(projectDir, "package.json");
+  if (!fs.existsSync(pkgPath)) return [];
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+    return Object.keys({ ...pkg.dependencies, ...pkg.devDependencies });
+  } catch {
+    return [];
+  }
+}
+
+function getRelatedFilesContext(projectDir: string, filePath: string): string {
+  if (!fs.existsSync(filePath)) return "";
+  const content = fs.readFileSync(filePath, "utf-8");
+  const importMatches = content.matchAll(/from\s+["']([^"']+)["']/g);
+  const seen = new Set<string>();
+  const sections: string[] = [];
+
+  for (const match of importMatches) {
+    const importPath = match[1];
+    const resolved = resolveLocalImport(projectDir, filePath, importPath);
+    if (resolved && !seen.has(resolved) && resolved !== filePath) {
+      seen.add(resolved);
+      const relatedContent = fs.readFileSync(resolved, "utf-8").slice(0, 1500);
+      sections.push(`--- ${path.relative(projectDir, resolved)} ---\n${relatedContent}`);
+    }
+  }
+
+  const schemaPath = path.join(projectDir, "prisma", "schema.prisma");
+  if (fs.existsSync(schemaPath) && !seen.has(schemaPath)) {
+    sections.push(`--- prisma/schema.prisma ---\n${fs.readFileSync(schemaPath, "utf-8").slice(0, 2000)}`);
+  }
+
+  const deps = readPackageDependencies(projectDir);
+  const depsSection = deps.length > 0
+    ? `\n\nDépendances npm réellement installées (n'importe AUCUN autre package) :\n${deps.join(", ")}`
+    : "";
+
+  if (sections.length === 0 && !depsSection) return "";
+  return `\n\nFichiers réels qu'il importe (NE JAMAIS inventer un export ou un champ absent d'ici) :\n${sections.join("\n\n")}${depsSection}`;
+}
+
+async function callAiBridge(prompt: string): Promise<string | null> {
+  try {
+    const response = await fetch(AI_BRIDGE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    let content: string = data.response || "";
+    content = content.replace(/^```[a-z]*\n?/i, "").replace(/```$/i, "").trim();
+    return content || null;
+  } catch {
+    return null;
+  }
+}
+
 async function regenerateFile(
+  projectDir: string,
   filePath: string,
   relativeFile: string,
   errors: string[],
   originalPrompt: string
 ): Promise<boolean> {
   const errorSummary = errors.join("\n");
+  const relatedContext = getRelatedFilesContext(projectDir, filePath);
 
-  const codePrompt = `Tu es ZOVO Builder AI. Le fichier "${relativeFile}" contient des erreurs TypeScript. Corrige-le.
+  const codePrompt = `Tu es ZOVO Builder AI. Le fichier "${relativeFile}" contient des erreurs. Corrige-le.
 
 Contexte du projet original : ${originalPrompt}
 
-Erreurs TypeScript détectées :
+Erreurs détectées :
 ${errorSummary}
 
 Contenu actuel du fichier :
 ${fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf-8") : "(fichier vide)"}
+${relatedContext}
 
 Règles strictes :
 - Retourne UNIQUEMENT le code source corrigé du fichier, sans markdown, sans backticks, sans explication.
 - Corrige les erreurs listées tout en gardant la logique et l'intention du fichier.
-- Le code doit être valide TypeScript complet.`;
+- N'importe QUE des modules/exports qui existent réellement dans les fichiers réels listés ci-dessus (s'il y en a) ou dans les dépendances npm listées. N'invente JAMAIS un nouveau fichier, un nouveau module, ou un export absent.
+- Si tu as besoin d'une fonction utilitaire qui n'existe dans aucun fichier listé, écris-la directement DANS ce fichier plutôt que de l'importer d'un fichier qui n'existe pas.
+- Le code doit être valide et complet.`;
 
-  try {
-    const response = await fetch(AI_BRIDGE_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: codePrompt }),
-    });
+  let content = await callAiBridge(codePrompt);
+  if (!content) return false;
 
-    if (!response.ok) return false;
+  // Anti-hallucination : vérifie que l'IA n'a pas inventé de nouveaux imports locaux
+  // malgré l'instruction. Si oui, une seconde tentative explicite avant d'accepter.
+  const invented = findInventedLocalImports(projectDir, filePath, content);
+  if (invented.length > 0) {
+    const retryPrompt = `${codePrompt}
 
-    const data = await response.json();
-    let content: string = data.response || "";
-    content = content.replace(/^```[a-z]*\n?/i, "").replace(/```$/i, "").trim();
+ATTENTION : ta réponse précédente importait ces chemins qui N'EXISTENT PAS : ${invented.join(", ")}.
+Corrige à nouveau en éliminant ces imports : soit tu inlines directement le code nécessaire dans ce fichier, soit tu retires la fonctionnalité qui en dépend. Ne réintroduis aucun de ces chemins ni aucun autre chemin inventé.`;
 
-    if (!content) return false;
-
-    fs.writeFileSync(filePath, content + "\n", "utf-8");
-    return true;
-  } catch {
-    return false;
+    const retryContent = await callAiBridge(retryPrompt);
+    if (retryContent) {
+      const stillInvented = findInventedLocalImports(projectDir, filePath, retryContent);
+      if (stillInvented.length === 0) {
+        content = retryContent;
+      } else {
+        console.warn(`[Validator] ${relativeFile} importe encore des chemins inventés après retry:`, stillInvented);
+      }
+    }
   }
+
+  fs.writeFileSync(filePath, content + "\n", "utf-8");
+  return true;
 }
+
+
+function fixMissingDatasource(projectDir: string): string[] {
+  const fixed: string[] = [];
+  const schemaPath = path.join(projectDir, "prisma", "schema.prisma");
+  if (!fs.existsSync(schemaPath)) return fixed;
+  let content = fs.readFileSync(schemaPath, "utf-8");
+
+  const generatorBlocks = content.match(/generator\s+\w+\s*{[^}]*}/g) || [];
+  const datasourceBlocks = content.match(/datasource\s+\w+\s*{[^}]*}/g) || [];
+  let changed = false;
+
+  if (datasourceBlocks.length === 0) {
+    content = `datasource db {\n  provider = "postgresql"\n  url      = env("DATABASE_URL")\n}\n\n` + content;
+    changed = true;
+  } else if (datasourceBlocks.length > 1) {
+    let count = 0;
+    content = content.replace(/datasource\s+\w+\s*{[^}]*}/g, (m) => (++count === 1 ? m : ""));
+    changed = true;
+  }
+
+  if (generatorBlocks.length === 0) {
+    content = `generator client {\n  provider = "prisma-client-js"\n}\n\n` + content;
+    changed = true;
+  } else if (generatorBlocks.length > 1) {
+    let count = 0;
+    content = content.replace(/generator\s+\w+\s*{[^}]*}/g, (m) => (++count === 1 ? m : ""));
+    changed = true;
+  }
+
+  if (changed) {
+    content = content.replace(/\n{3,}/g, "\n\n");
+    fs.writeFileSync(schemaPath, content, "utf-8");
+    fixed.push("prisma/schema.prisma");
+  }
+  return fixed;
+}
+
+function fixMismatchedPrismaModelNames(projectDir: string): string[] {
+  const fixed: string[] = [];
+  const schemaPath = path.join(projectDir, "prisma", "schema.prisma");
+  if (!fs.existsSync(schemaPath)) return fixed;
+  const schemaContent = fs.readFileSync(schemaPath, "utf-8");
+
+  const modelNames = new Set<string>();
+  const modelRegex = /model\s+(\w+)\s*{/g;
+  let m;
+  while ((m = modelRegex.exec(schemaContent)) !== null) modelNames.add(m[1]);
+  if (modelNames.size === 0) return fixed;
+
+  const lowerToReal = new Map<string, string>();
+  for (const name of modelNames) lowerToReal.set(name.charAt(0).toLowerCase() + name.slice(1), name);
+
+  const srcDir = path.join(projectDir, "src");
+  if (!fs.existsSync(srcDir)) return fixed;
+
+  function walk(dir: string) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules" || entry.name === ".next") continue;
+        walk(fullPath);
+      } else if (/\.(ts|tsx)$/.test(entry.name)) {
+        let content = fs.readFileSync(fullPath, "utf-8");
+        let changed = false;
+        content = content.replace(/prisma\.(\w+)\./g, (match, accessor) => {
+          if (lowerToReal.has(accessor)) return match;
+          for (const [validLower] of lowerToReal) {
+            if (validLower.toLowerCase() === accessor.toLowerCase()) {
+              changed = true;
+              return `prisma.${validLower}.`;
+            }
+          }
+          return match;
+        });
+        if (changed) {
+          fs.writeFileSync(fullPath, content, "utf-8");
+          fixed.push(path.relative(projectDir, fullPath));
+        }
+      }
+    }
+  }
+  walk(srcDir);
+  return fixed;
+}
+
+function fixInconsistentComponentProps(projectDir: string): string[] {
+  const fixed: string[] = [];
+  const srcDir = path.join(projectDir, "src");
+  if (!fs.existsSync(srcDir)) return fixed;
+
+  const componentFiles: string[] = [];
+  function walk(dir: string) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules" || entry.name === ".next") continue;
+        walk(fullPath);
+      } else if (/\.tsx$/.test(entry.name)) {
+        componentFiles.push(fullPath);
+      }
+    }
+  }
+  walk(srcDir);
+
+  const acceptsProps = new Map<string, boolean>();
+  for (const filePath of componentFiles) {
+    const content = fs.readFileSync(filePath, "utf-8");
+    const baseName = path.basename(filePath, path.extname(filePath));
+    const funcMatch = content.match(/export\s+default\s+function\s+(\w+)\s*\(([^)]*)\)/);
+    if (funcMatch) acceptsProps.set(baseName, funcMatch[2].trim().length > 0);
+  }
+
+  for (const filePath of componentFiles) {
+    let content = fs.readFileSync(filePath, "utf-8");
+    let changed = false;
+    for (const [compName, hasProps] of acceptsProps) {
+      if (hasProps) continue;
+      const usageRegex = new RegExp(`<${compName}\\s+[^>]*?(/?)>`, "g");
+      content = content.replace(usageRegex, (match, selfClose) => {
+        if (!match.includes("=")) return match;
+        changed = true;
+        return selfClose === "/" ? `<${compName} />` : `<${compName}>`;
+      });
+    }
+    if (changed) {
+      fs.writeFileSync(filePath, content, "utf-8");
+      fixed.push(path.relative(projectDir, filePath));
+    }
+  }
+  return fixed;
+}
+
 
 export class Validator {
 
@@ -210,11 +525,21 @@ export class Validator {
     maxAttempts: number = 2
   ): Promise<ValidationResult> {
     const fixedFiles: string[] = [];
+    const envReport = runEnvironmentDoctor();
+    if (!envReport.ok) {
+      const fatalIssues = envReport.issues.filter((i: { fatal: boolean }) => i.fatal).map((i: { message: string }) => i.message);
+      return { valid: false, errors: fatalIssues, fixedFiles: [] };
+    }
+
 
     const installed = installDependencies(projectDir);
     if (!installed) {
       return { valid: false, errors: ["Échec de l'installation des dépendances (npm install)"], fixedFiles };
     }
+
+
+    const doctorFixes = runCodeDoctor(projectDir);
+    fixedFiles.push(...doctorFixes);
 
     const jsxExtensionFixes = fixTsFilesContainingJsx(projectDir);
     fixedFiles.push(...jsxExtensionFixes);
@@ -222,8 +547,34 @@ export class Validator {
     const malformedDirectiveFixes = stripMalformedUseClientDirective(projectDir);
     fixedFiles.push(...malformedDirectiveFixes);
 
+    const hallucinationFixes = fixCommonHallucinations(projectDir);
+    fixedFiles.push(...hallucinationFixes);
+
     const useClientFixes = fixMissingUseClientDirective(projectDir);
     fixedFiles.push(...useClientFixes);
+
+    const prismaSchemaFixes = fixMalformedPrismaSchema(projectDir);
+    fixedFiles.push(...prismaSchemaFixes);
+
+    const datasourceFixes = fixMissingDatasource(projectDir);
+    fixedFiles.push(...datasourceFixes);
+    const modelNameFixes = fixMismatchedPrismaModelNames(projectDir);
+    fixedFiles.push(...modelNameFixes);
+    const propFixes = fixInconsistentComponentProps(projectDir);
+    fixedFiles.push(...propFixes);
+
+    let blueprintForRoutes: any = {};
+    try {
+      const bpPath = path.join(projectDir, ".zovo-blueprint.json");
+      if (fs.existsSync(bpPath)) {
+        blueprintForRoutes = JSON.parse(fs.readFileSync(bpPath, "utf-8"));
+      }
+    } catch {}
+    const fixedRoutes = fixMissingRoutePages(projectDir, blueprintForRoutes);
+    if (fixedRoutes.length > 0) {
+      console.log(`Pages générées automatiquement: ${fixedRoutes.join(", ")}`);
+      fixedFiles.push(...fixedRoutes.map((r) => `src/app${r}/page.tsx`));
+    }
 
     let attempt = 0;
 
@@ -234,13 +585,50 @@ export class Validator {
       const repeatedMalformedDirectiveFixes = stripMalformedUseClientDirective(projectDir);
       fixedFiles.push(...repeatedMalformedDirectiveFixes);
 
+      const repeatedHallucinationFixes = fixCommonHallucinations(projectDir);
+      fixedFiles.push(...repeatedHallucinationFixes);
+
       const repeatedUseClientFixes = fixMissingUseClientDirective(projectDir);
       fixedFiles.push(...repeatedUseClientFixes);
+
+      const repeatedPrismaSchemaFixes = fixMalformedPrismaSchema(projectDir);
+      fixedFiles.push(...repeatedPrismaSchemaFixes);
+
+      const repeatedDatasourceFixes = fixMissingDatasource(projectDir);
+      fixedFiles.push(...repeatedDatasourceFixes);
+      const repeatedModelNameFixes = fixMismatchedPrismaModelNames(projectDir);
+      fixedFiles.push(...repeatedModelNameFixes);
+      const repeatedPropFixes = fixInconsistentComponentProps(projectDir);
+      fixedFiles.push(...repeatedPropFixes);
 
       const { ok, output } = runTypeCheck(projectDir);
 
       if (ok) {
-        return { valid: true, errors: [], fixedFiles };
+        const buildResult = runNextBuild(projectDir);
+        if (buildResult.ok) {
+          return { valid: true, errors: [], fixedFiles };
+        }
+
+        const buildFileErrors = extractBuildFileErrors(buildResult.output);
+
+        if (buildFileErrors.size === 0 || attempt === maxAttempts) {
+          return {
+            valid: false,
+            errors: buildFileErrors.size > 0
+              ? Array.from(buildFileErrors.entries()).map(([file, errs]) => `${file}: ${errs.join("; ")}`)
+              : [buildResult.output.slice(0, 500) || "Erreur de build inconnue"],
+            fixedFiles,
+          };
+        }
+
+        for (const [relativeFile, errors] of buildFileErrors) {
+          const filePath = path.join(projectDir, relativeFile);
+          const success = await regenerateFile(projectDir, filePath, relativeFile, errors, originalPrompt);
+          if (success) fixedFiles.push(relativeFile);
+        }
+
+        attempt++;
+        continue;
       }
 
       const fileErrors = extractFileErrors(output);
@@ -257,7 +645,7 @@ export class Validator {
 
       for (const [relativeFile, errors] of fileErrors) {
         const filePath = path.join(projectDir, relativeFile);
-        const success = await regenerateFile(filePath, relativeFile, errors, originalPrompt);
+        const success = await regenerateFile(projectDir, filePath, relativeFile, errors, originalPrompt);
         if (success) fixedFiles.push(relativeFile);
       }
 
@@ -270,3 +658,230 @@ export class Validator {
 
 const validatorInstance = new Validator();
 export default validatorInstance;
+
+const ROUTE_COMPONENT_MAP: Record<string, string[]> = {
+  "/dashboard": ["Dashboard", "DashboardStats"],
+  "/login": ["LoginForm"],
+  "/signup": ["SignupForm"],
+  "/items": ["ItemList", "ItemForm"],
+  "/search": ["SearchBar", "SearchResults"],
+  "/profile": ["ProfileForm", "AvatarUpload"],
+  "/admin": ["AdminPanel", "UserTable"],
+};
+
+export function fixMissingRoutePages(
+  projectPath: string,
+  blueprint: { routes?: string[]; components?: string[] }
+): string[] {
+  const fs = require("fs");
+  const path = require("path");
+  const created: string[] = [];
+  const routes = (blueprint.routes || []).filter((r) => r !== "/");
+
+  for (const route of routes) {
+    const pagePath = path.join(projectPath, "src/app", route.slice(1), "page.tsx");
+    if (fs.existsSync(pagePath)) continue;
+
+    const wantedComponents = ROUTE_COMPONENT_MAP[route] || [];
+    const availableComponents = wantedComponents.filter((c) =>
+      (blueprint.components || []).includes(c)
+    );
+
+    if (availableComponents.length === 0) continue;
+
+    const imports = availableComponents
+      .map((c) => `import ${c} from "@/components/${c}";`)
+      .join("\n");
+    const jsx = availableComponents.map((c) => `      <${c} />`).join("\n");
+
+    const content = `${imports}
+
+export default function Page() {
+  return (
+    <div>
+${jsx}
+    </div>
+  );
+}
+`;
+
+    fs.mkdirSync(path.dirname(pagePath), { recursive: true });
+    fs.writeFileSync(pagePath, content, "utf-8");
+    created.push(route);
+  }
+
+  return created;
+}
+
+const ROUTE_FORBIDDEN_KEYWORDS: Record<string, string[]> = {
+  "/": ["ProfilePage", "handleDeleteAccount", "Supprimer le compte", "AdminPanel", "UserTable"],
+  "/login": ["ProfilePage", "AdminPanel", "handleDeleteAccount"],
+  "/signup": ["ProfilePage", "AdminPanel", "handleDeleteAccount"],
+  "/admin": ["LoginForm", "SignupForm", "handleDeleteAccount"],
+  "/dashboard": ["LoginForm", "SignupForm"],
+};
+
+export function detectMismatchedPageContent(
+  projectDir: string,
+  routes: string[]
+): string[] {
+  const suspicious: string[] = [];
+
+  for (const route of routes) {
+    const routeSegment = route === "/" ? "" : route.slice(1);
+    const pagePath = path.join(projectDir, "src/app", routeSegment, "page.tsx");
+    if (!fs.existsSync(pagePath)) continue;
+
+    const content = fs.readFileSync(pagePath, "utf-8");
+    const forbidden = ROUTE_FORBIDDEN_KEYWORDS[route] || [];
+
+    for (const keyword of forbidden) {
+      if (content.includes(keyword)) {
+        suspicious.push(
+          `${route}/page.tsx contient "${keyword}", incohérent avec cette route`
+        );
+      }
+    }
+  }
+
+  return suspicious;
+}
+
+// Mots-clés sémantiques attendus dans le texte visible de chaque route (couche 2)
+const ROUTE_EXPECTED_SEMANTICS: Record<string, string[]> = {
+  "/": ["bienvenue", "accueil", "connecter", "inscrire"],
+  "/login": ["connexion", "email", "mot de passe", "connecter"],
+  "/signup": ["inscription", "créer", "compte"],
+  "/admin": ["admin", "utilisateur", "gestion"],
+  "/profile": ["profil", "compte", "paramètre"],
+  "/dashboard": ["tableau", "dashboard", "statistique"],
+  "/search": ["recherche", "résultat"],
+};
+
+interface HallucinationCheckResult {
+  route: string;
+  reasons: string[];
+  needsAiReview: boolean;
+}
+
+export function detectHallucinatedPageContent(
+  projectDir: string,
+  routes: string[],
+  pageComponentMap: Record<string, string[]> = {}
+): HallucinationCheckResult[] {
+  const results: HallucinationCheckResult[] = [];
+
+  for (const route of routes) {
+    if (route === "/") continue;
+    const routeSegment = route.slice(1);
+    const pagePath = path.join(projectDir, "src/app", routeSegment, "page.tsx");
+    if (!fs.existsSync(pagePath)) continue;
+
+    const content = fs.readFileSync(pagePath, "utf-8");
+    const reasons: string[] = [];
+
+    // Couche 1 : vérification structurelle des imports vs blueprint
+    const actualImports = [...content.matchAll(/from ["']@\/components\/(\w+)["']/g)].map((m) => m[1]);
+    const expectedComponents = pageComponentMap[route] || [];
+    if (expectedComponents.length > 0 && actualImports.length > 0) {
+      const unexpected = actualImports.filter((c) => !expectedComponents.includes(c));
+      if (unexpected.length > 0) {
+        reasons.push(
+          `importe ${unexpected.join(", ")} au lieu des composants attendus (${expectedComponents.join(", ")})`
+        );
+      }
+    }
+
+    // Couche 2 : vérification sémantique légère du texte visible
+    const expectedWords = ROUTE_EXPECTED_SEMANTICS[route];
+    if (expectedWords) {
+      const lowerContent = content.toLowerCase();
+      const hasAnyExpectedWord = expectedWords.some((w) => lowerContent.includes(w));
+      if (!hasAnyExpectedWord && content.length > 200) {
+        reasons.push(
+          `aucun mot-clé attendu pour cette route trouvé (${expectedWords.join("/")})`
+        );
+      }
+    }
+
+    if (reasons.length > 0) {
+      results.push({ route, reasons, needsAiReview: true });
+    }
+  }
+
+  return results;
+}
+
+// Couche 3 : relecture IA, appelée UNIQUEMENT sur les fichiers déjà suspects (coût minimal)
+export async function aiReviewSuspiciousPage(
+  route: string,
+  pageContent: string,
+  aiBridgeUrl: string
+): Promise<{ isHallucinated: boolean; explanation: string }> {
+  try {
+    const prompt = `Voici le contenu d'un fichier page.tsx qui doit correspondre à la route "${route}" d'une application web.
+
+Vérifie si ce code semble cohérent avec cette route, ou s'il contient par erreur le contenu d'une AUTRE page (ex: une page de login qui contient du code de profil utilisateur).
+
+Réponds UNIQUEMENT en JSON strict, sans markdown : {"isHallucinated": true ou false, "explanation": "raison courte"}
+
+Code à analyser :
+${pageContent.slice(0, 3000)}`;
+
+    const response = await fetch(aiBridgeUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!response.ok) {
+      return { isHallucinated: false, explanation: "Revue IA indisponible, validation ignorée" };
+    }
+
+    const data = await response.json();
+    let raw = (data.response || "").trim();
+    raw = raw.replace(/^```json\n?/i, "").replace(/```$/i, "").trim();
+    const parsed = JSON.parse(raw);
+
+    return {
+      isHallucinated: Boolean(parsed.isHallucinated),
+      explanation: parsed.explanation || "",
+    };
+  } catch {
+    return { isHallucinated: false, explanation: "Erreur lors de la revue IA, validation ignorée" };
+  }
+}
+
+// Fonction combinée : couches 1+2 d'abord, puis couche 3 seulement si nécessaire
+export async function detectHallucinationWithAiFallback(
+  projectDir: string,
+  routes: string[],
+  pageComponentMap: Record<string, string[]> = {},
+  aiBridgeUrl?: string
+): Promise<string[]> {
+  const structuralHits = detectHallucinatedPageContent(projectDir, routes, pageComponentMap);
+  if (structuralHits.length === 0) return [];
+
+  const confirmed: string[] = [];
+
+  for (const hit of structuralHits) {
+    if (!aiBridgeUrl) {
+      // Sans AI bridge configuré, on se fie uniquement aux couches 1+2
+      confirmed.push(`${hit.route}: ${hit.reasons.join("; ")}`);
+      continue;
+    }
+
+    const routeSegment = hit.route.slice(1);
+    const pagePath = path.join(projectDir, "src/app", routeSegment, "page.tsx");
+    const content = fs.readFileSync(pagePath, "utf-8");
+
+    const aiResult = await aiReviewSuspiciousPage(hit.route, content, aiBridgeUrl);
+    if (aiResult.isHallucinated) {
+      confirmed.push(`${hit.route}: ${hit.reasons.join("; ")} [confirmé par IA: ${aiResult.explanation}]`);
+    }
+    // Si l'IA dit que ce n'est pas une hallucination, on ne le signale pas (faux positif des couches 1+2 filtré)
+  }
+
+  return confirmed;
+}
