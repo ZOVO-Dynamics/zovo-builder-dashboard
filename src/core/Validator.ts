@@ -116,23 +116,78 @@ function fixTsFilesContainingJsx(projectDir: string): string[] {
   return fixedFiles;
 }
 
+function stripHallucinatedGeneratorWrapper(content: string): string | null {
+  const lines = content.split("\n");
+
+  let startIdx = 0;
+  while (startIdx < lines.length && lines[startIdx].trim() === "") startIdx++;
+  if (startIdx >= lines.length) return null;
+
+  // Signature du bug : l'IA enveloppe tout le fichier dans un faux appel de
+  // fonction JS `generator({ schema: ... })`, syntaxe qui n'existe pas en Prisma
+  // (un vrai bloc generator s'écrit `generator nom { ... }`, jamais `generator(`).
+  if (!/^generator\s*\(\s*\{\s*$/.test(lines[startIdx].trim())) return null;
+
+  let idx = startIdx + 1;
+  while (idx < lines.length && lines[idx].trim() === "") idx++;
+  if (idx >= lines.length) return null;
+  if (!/^schema\s*:\s*[`{]\s*$/.test(lines[idx].trim())) return null;
+
+  const headerEnd = idx;
+
+  let endIdx = lines.length - 1;
+  while (endIdx > headerEnd && lines[endIdx].trim() === "") endIdx--;
+
+  let footerStart = endIdx;
+  while (footerStart > headerEnd && /^[`})\s;]+$/.test(lines[footerStart]) && lines[footerStart].trim() !== "") {
+    footerStart--;
+  }
+  footerStart++;
+
+  if (footerStart <= headerEnd) return null;
+
+  const realContent = lines.slice(headerEnd + 1, footerStart).join("\n");
+
+  // Garde-fou : le contenu récupéré doit ressembler à un vrai schema.prisma,
+  // sinon on préfère ne rien toucher plutôt que de risquer de tronquer le fichier.
+  if (!/\b(generator|datasource|model)\b/.test(realContent)) return null;
+
+  return realContent.replace(/^\n+/, "").replace(/\n+$/, "\n");
+}
+
 function fixMalformedPrismaSchema(projectDir: string): string[] {
   const fixedFiles: string[] = [];
   const schemaPath = path.join(projectDir, "prisma", "schema.prisma");
   if (!fs.existsSync(schemaPath)) return fixedFiles;
 
-  const content = fs.readFileSync(schemaPath, "utf-8");
+  let content = fs.readFileSync(schemaPath, "utf-8");
+  let changed = false;
+
+  // Cas 1 : ligne "generator "xxx"" orpheline isolée (variante connue depuis début août).
   const lines = content.split("\n");
   const filtered = lines.filter((line) => !/^\s*generator\s+"[^"]*"\s*$/.test(line));
-
   if (filtered.length !== lines.length) {
-    const cleaned = filtered.join("\n").replace(/^\n+/, "");
-    fs.writeFileSync(schemaPath, cleaned, "utf-8");
+    content = filtered.join("\n").replace(/^\n+/, "");
+    changed = true;
+  }
+
+  // Cas 2 : wrapper halluciné complet generator({ schema: `...` }) ou
+  // generator({ schema: { ... } }) autour de tout le fichier.
+  const unwrapped = stripHallucinatedGeneratorWrapper(content);
+  if (unwrapped !== null) {
+    content = unwrapped;
+    changed = true;
+  }
+
+  if (changed) {
+    fs.writeFileSync(schemaPath, content, "utf-8");
     fixedFiles.push(path.relative(projectDir, schemaPath));
   }
 
   return fixedFiles;
 }
+
+export { fixMalformedPrismaSchema, stripHallucinatedGeneratorWrapper };
 
 function resolveLocalImport(projectDir: string, fromFile: string, importPath: string): string | null {
   let basePath: string;
