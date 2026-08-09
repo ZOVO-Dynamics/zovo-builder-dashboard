@@ -40,6 +40,7 @@ model User {
   listings           MarketplaceListing[]     @relation("SellerListings")
   purchases          MarketplaceTransaction[] @relation("BuyerTransactions")
   sales              MarketplaceTransaction[] @relation("SellerTransactions")
+  repairJobs         RepairJob[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -200,6 +201,7 @@ model Project {
   generations Generation[]
   versions    ProjectVersion[]
   listing     MarketplaceListing?
+  repairJobs  RepairJob[]
 
   @@index([userId])
 }
@@ -363,4 +365,61 @@ enum TransactionStatus {
   COMPLETED
   FAILED
   REFUNDED
+}
+
+enum RepairJobStatus {
+  PENDING_PAYMENT
+  PAID
+  QUEUED
+  ANALYZING
+  FIXING
+  VALIDATING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum RepairValidationStatus {
+  PENDING
+  OK
+  FAILED
+}
+
+// ZOVO Correction & Validation — service payant (29,99$ CAD, paiement unique)
+// qui relance le Validator existant sur un projet déjà généré pour corriger
+// les erreurs restantes et produire un rapport client compréhensible.
+model RepairJob {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  stripeCheckoutSessionId String? @unique
+  stripePaymentIntentId   String? @unique
+
+  status RepairJobStatus @default(PENDING_PAYMENT)
+
+  price    Int    @default(2999) // en cents
+  currency String @default("CAD")
+
+  attempts         Int                    @default(0)
+  errorsDetected   Int?
+  errorsFixed      Int?
+  validationStatus RepairValidationStatus @default(PENDING)
+
+  fixedFilesSummary Json?
+  remainingErrors   Json?
+  failureReason     String? @db.Text
+
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([status])
 }

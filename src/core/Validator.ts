@@ -15,6 +15,7 @@ export interface ValidationResult {
   valid: boolean;
   errors: string[];
   fixedFiles: string[];
+  attempts?: number;
 }
 
 function installDependencies(projectDir: string): boolean {
@@ -591,13 +592,13 @@ export class Validator {
     const envReport = runEnvironmentDoctor();
     if (!envReport.ok) {
       const fatalIssues = envReport.issues.filter((i: { fatal: boolean }) => i.fatal).map((i: { message: string }) => i.message);
-      return { valid: false, errors: fatalIssues, fixedFiles: [] };
+      return { valid: false, errors: fatalIssues, fixedFiles: [], attempts: 0 };
     }
 
 
     const installed = installDependencies(projectDir);
     if (!installed) {
-      return { valid: false, errors: ["Échec de l'installation des dépendances (npm install)"], fixedFiles };
+      return { valid: false, errors: ["Échec de l'installation des dépendances (npm install)"], fixedFiles, attempts: 0 };
     }
 
 
@@ -697,7 +698,7 @@ export class Validator {
       if (ok) {
         const buildResult = runNextBuild(projectDir);
         if (buildResult.ok) {
-          return { valid: true, errors: [], fixedFiles };
+          return { valid: true, errors: [], fixedFiles, attempts: attempt };
         }
 
         const buildFileErrors = extractBuildFileErrors(buildResult.output);
@@ -709,6 +710,7 @@ export class Validator {
               ? Array.from(buildFileErrors.entries()).map(([file, errs]) => `${file}: ${errs.join("; ")}`)
               : [buildResult.output.slice(0, 500) || "Erreur de build inconnue"],
             fixedFiles,
+            attempts: attempt,
           };
         }
 
@@ -731,6 +733,7 @@ export class Validator {
             ? Array.from(fileErrors.entries()).map(([file, errs]) => `${file}: ${errs.join("; ")}`)
             : [output.slice(0, 500) || "Erreur tsc inconnue"],
           fixedFiles,
+          attempts: attempt,
         };
       }
 
@@ -743,7 +746,7 @@ export class Validator {
       attempt++;
     }
 
-    return { valid: false, errors: ["Validation abandonnée après plusieurs tentatives"], fixedFiles };
+    return { valid: false, errors: ["Validation abandonnée après plusieurs tentatives"], fixedFiles, attempts: attempt };
   }
 }
 

@@ -3,6 +3,7 @@ import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
 import Stripe from "stripe";
 import { Resend } from "resend";
+import { runRepairJob } from "@/core/RepairEngine";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -40,6 +41,52 @@ export async function POST(req: NextRequest) {
 
         const userId = session.metadata?.userId;
         const planId = session.metadata?.planId;
+
+        // ZOVO Correction & Validation : paiement unique, jamais un abonnement.
+        // Idempotence : un même événement/session Stripe ne doit créer qu'un
+        // seul RepairJob, même en cas de re-livraison du webhook par Stripe.
+        if (session.metadata?.kind === "repair") {
+          const repairProjectId = session.metadata?.repairProjectId;
+
+          if (!userId || !repairProjectId) break;
+
+          const existingJob = await prisma.repairJob.findUnique({
+            where: { stripeCheckoutSessionId: session.id },
+          });
+
+          if (existingJob) {
+            console.log(`[RepairJob: ${existingJob.id}] webhook re-livré, ignoré (idempotence)`);
+            break;
+          }
+
+          const project = await prisma.project.findUnique({ where: { id: repairProjectId } });
+          if (!project || project.userId !== userId) {
+            console.error(
+              `STRIPE WEBHOOK: session ${session.id} référence un projet introuvable ou n'appartenant pas à l'utilisateur`
+            );
+            break;
+          }
+
+          const repairJob = await prisma.repairJob.create({
+            data: {
+              userId,
+              projectId: repairProjectId,
+              stripeCheckoutSessionId: session.id,
+              stripePaymentIntentId: String(session.payment_intent || "") || null,
+              status: "PAID",
+              price: session.amount_total ?? undefined,
+              currency: (session.currency || "cad").toUpperCase(),
+            },
+          });
+
+          console.log(`[RepairJob: ${repairJob.id}] payment_status = paid`);
+
+          runRepairJob(repairJob.id).catch((err) => {
+            console.error(`[RepairJob: ${repairJob.id}] runRepairJob unhandled error:`, err);
+          });
+
+          break;
+        }
 
         const creditPackId = session.metadata?.creditPackId;
         const creditsToAdd = session.metadata?.credits ? parseInt(session.metadata.credits, 10) : 0;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import RepairCard from "./RepairCard";
 
 interface BlueprintResult {
   success: boolean;
@@ -436,6 +437,11 @@ export default function GeneratorPanel() {
         <span style={{ fontFamily: "var(--font-mono)" }} className="text-xs text-[#E8C34A]">GENERATEUR</span>
         <h2 style={{ fontFamily: "var(--font-display)" }} className="mt-1 text-lg font-bold">Generer une application</h2>
       </div>
+
+      <RepairCard
+        projectId={result?.projectRecordId ?? null}
+        validationFailed={Boolean(result?.success && result.validation && result.validation.valid === false)}
+      />
 
       {stuckJob && (
         <div className="rounded-lg border border-amber-700/60 bg-amber-950/40 p-3 space-y-2">
