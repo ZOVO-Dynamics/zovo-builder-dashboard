@@ -63,6 +63,10 @@ async function waitForReady(port: number, timeoutMs: number = 60000): Promise<bo
 
 export class PreviewManager {
   async start(projectId: string, projectDir: string): Promise<{ port: number }> {
+    const existing = activePreviews.get(projectId);
+    if (existing && (existing.status === "ready" || existing.status === "starting" || existing.status === "installing")) {
+      return { port: existing.port };
+    }
     this.stop(projectId);
 
     const port = findFreePort();

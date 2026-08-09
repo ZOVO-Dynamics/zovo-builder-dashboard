@@ -64,6 +64,24 @@ async function runGenerationJob(
       fallbackFiles = writeResult.fallbackFiles;
     }
 
+    const { fixMissingRoutePages, detectHallucinationWithAiFallback } = await import("@/core/Validator");
+    const fixedRoutes = fixMissingRoutePages(projectPath, buildBlueprint);
+    if (fixedRoutes.length > 0) {
+      console.log(`Pages generees automatiquement: ${fixedRoutes.join(", ")}`);
+    }
+
+    const aiBridgeUrl = process.env.AI_BRIDGE_URL || "http://localhost:4000/api/generate";
+    const hallucinations = await detectHallucinationWithAiFallback(
+      projectPath,
+      buildBlueprint.routes,
+      {},
+      aiBridgeUrl
+    );
+    if (hallucinations.length > 0) {
+      console.warn(`[route.ts] Hallucinations detectees: ${hallucinations.join(" | ")}`);
+    }
+    const hasHallucinations = hallucinations.length > 0;
+
     const validation = await validator.validate(projectPath, prompt, 2);
 
     const historyEntry = generationHistory.add({
@@ -127,7 +145,8 @@ async function runGenerationJob(
           projectPath,
           filesCreated,
           fallbackFiles,
-          degraded: fallbackFiles.length > 0,
+          degraded: fallbackFiles.length > 0 || hasHallucinations,
+          hallucinations,
           validation,
           historyId: historyEntry.id,
           projectRecordId: project.id,

@@ -25,15 +25,21 @@ model User {
   monthlyUsage Int      @default(0)
   usageResetAt DateTime @default(now())
 
+  accountType AccountType @default(CREATOR)
+
   accounts           Account[]
   sessions           Session[]
   subscription       Subscription?
   generations        Generation[]
   projects           Project[]
   entitlement        UserEntitlement?
-  creditsBalance     Int                 @default(0)
+  creditsBalance     Int                      @default(0)
   creditTransactions CreditTransaction[]
   supportMessages    SupportMessage[]
+  connectAccount     ConnectAccount?
+  listings           MarketplaceListing[]     @relation("SellerListings")
+  purchases          MarketplaceTransaction[] @relation("BuyerTransactions")
+  sales              MarketplaceTransaction[] @relation("SellerTransactions")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -127,7 +133,7 @@ model SubscriptionPlan {
   updatedAt        DateTime @updatedAt
 
   subscriptions Subscription[]
-  prices           PlanPrice[]
+  prices        PlanPrice[]
 }
 
 model UsageLimit {
@@ -181,18 +187,19 @@ model GenerationJob {
 }
 
 model Project {
-  id              String   @id @default(cuid())
-  userId          String
-  name            String
-  projectPath     String   @unique
-  currentVersion  Int      @default(1)
-  preferences     Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(cuid())
+  userId         String
+  name           String
+  projectPath    String   @unique
+  currentVersion Int      @default(1)
+  preferences    Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   generations Generation[]
-  versions   ProjectVersion[]
+  versions    ProjectVersion[]
+  listing     MarketplaceListing?
 
   @@index([userId])
 }
@@ -291,4 +298,69 @@ model SupportMessage {
 
   @@index([userId])
   @@index([createdAt])
+}
+
+enum AccountType {
+  CREATOR
+  AGENCY
+}
+
+model ConnectAccount {
+  id                     String   @id @default(cuid())
+  userId                 String   @unique
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeConnectAccountId String   @unique
+  onboardingComplete     Boolean  @default(false)
+  payoutsEnabled         Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model MarketplaceListing {
+  id                  String                  @id @default(cuid())
+  projectId           String                  @unique
+  project             Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sellerId            String
+  seller              User                    @relation("SellerListings", fields: [sellerId], references: [id])
+  askingPriceCents    Int
+  estimatedValueCents Int?
+  description         String?
+  status              ListingStatus           @default(DRAFT)
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  transaction         MarketplaceTransaction?
+
+  @@index([sellerId])
+}
+
+enum ListingStatus {
+  DRAFT
+  LISTED
+  SOLD
+  WITHDRAWN
+}
+
+model MarketplaceTransaction {
+  id                    String             @id @default(cuid())
+  listingId             String             @unique
+  listing               MarketplaceListing @relation(fields: [listingId], references: [id])
+  buyerId               String
+  buyer                 User               @relation("BuyerTransactions", fields: [buyerId], references: [id])
+  sellerId              String
+  seller                User               @relation("SellerTransactions", fields: [sellerId], references: [id])
+  amountCents           Int
+  commissionCents       Int
+  stripePaymentIntentId String             @unique
+  status                TransactionStatus  @default(PENDING)
+  createdAt             DateTime           @default(now())
+
+  @@index([buyerId])
+  @@index([sellerId])
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
 }

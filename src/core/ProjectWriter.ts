@@ -36,7 +36,9 @@ Règles strictes :
 - N'invente pas d'imports vers des fichiers qui n'existent pas dans ce projet.
 - N'utilise QUE les packages npm suivants (en plus de next/react/typescript déjà fournis) : ${blueprint.dependencies.join(", ") || "aucun package supplémentaire"}. N'importe JAMAIS un autre package externe (pas de axios, next-auth, jsonwebtoken, nookies, react-hook-form, zod, etc. sauf s'ils apparaissent explicitement dans cette liste). Utilise fetch natif, useState/useContext, et les API natives du navigateur/Node à la place.
 - Si ce projet a de l'authentification (fichiers src/components/AuthProvider.tsx, LoginForm.tsx ou SignupForm.tsx présents dans le projet), ces 3 fichiers existent déjà et sont FIXES : n'en crée jamais de nouvelle version, n'importe JAMAIS de fichier situé à un autre chemin comme "../context/auth" ou "../contexts/AuthContext". Pour accéder à l'utilisateur connecté ou aux fonctions login/signup/logout, importe TOUJOURS exactement : import { useAuth } from "@/components/AuthProvider"; puis utilise const { user, loading, login, signup, logout } = useAuth();
-- Si ce fichier est une route API (chemin contenant "app/api" et nommé "route.ts"), utilise EXCLUSIVEMENT la syntaxe App Router de Next.js : export async function GET(request: Request) / POST(request: Request) / etc., et retourne toujours NextResponse.json(...). N'utilise JAMAIS NextApiRequest ni NextApiResponse (ancien Pages Router), ni req.method/req.url sur l'objet request.`;
+- Si ce fichier est une route API (chemin contenant "app/api" et nommé "route.ts"), utilise EXCLUSIVEMENT la syntaxe App Router de Next.js : export async function GET(request: Request) / POST(request: Request) / etc., et retourne toujours NextResponse.json(...). N'utilise JAMAIS NextApiRequest ni NextApiResponse (ancien Pages Router), ni req.method/req.url sur l'objet request.
+- Pour la navigation programmatique, importe TOUJOURS useRouter/usePathname/useSearchParams depuis "next/navigation" (App Router). N'importe JAMAIS depuis "next/router" (ancien Pages Router, incompatible).
+- N'utilise JAMAIS directement les globals navigateur FileList, File, ou Blob dans un schéma de validation (ex: zod) évalué au niveau module, car ils causent un crash au prerendering serveur. Si nécessaire, garde-les avec typeof avant utilisation, ou valide côté client uniquement dans un handler d'événement.`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 180000);
@@ -81,7 +83,7 @@ function fallbackContent(file: string, blueprint: BuildBlueprint): string {
       private: true,
       scripts: {
         dev: "next dev",
-        build: "next build",
+        build: blueprint.dependencies.includes("prisma") ? "prisma generate && next build" : "next build",
         start: "next start"
       },
       dependencies: Object.fromEntries(

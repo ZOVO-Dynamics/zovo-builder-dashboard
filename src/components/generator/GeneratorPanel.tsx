@@ -585,12 +585,6 @@ export default function GeneratorPanel() {
               {previewLoading ? `${previewLabel || "Demarrage..."}${previewPercent !== null ? ` (${previewPercent}%)` : ""}` : "Preview"}
             </button>
             <button
-              onClick={handleExport}
-              className="rounded-md bg-[#C9A227] hover:bg-[#E8C34A] px-4 py-2 text-sm font-medium text-[#0A0A0C]"
-            >
-              Export ZIP
-            </button>
-            <button
               onClick={handleDeploy}
               disabled={deployLoading}
               className="rounded-md border border-[#C9A227]/60 text-[#E8C34A] hover:bg-[#C9A227]/10 disabled:opacity-40 px-4 py-2 text-sm font-medium"

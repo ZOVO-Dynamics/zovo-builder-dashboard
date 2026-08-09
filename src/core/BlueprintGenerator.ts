@@ -139,10 +139,16 @@ export class BlueprintGenerator {
     const nameSource = input.projectType || "app";
     const name = `zovo-${nameSource.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
 
+    const { files: filesWithPages } = ensureRoutePageFiles(
+      Array.from(routes),
+      Array.from(components),
+      Array.from(files)
+    );
+
     return {
       name,
       folders: Array.from(folders),
-      files: Array.from(files),
+      files: filesWithPages,
       components: Array.from(components),
       routes: Array.from(routes),
       dependencies: Array.from(dependencies)
@@ -152,3 +158,36 @@ export class BlueprintGenerator {
 
 const blueprintgeneratorInstance = new BlueprintGenerator();
 export default blueprintgeneratorInstance;
+
+const ROUTE_COMPONENT_MAP_BG: Record<string, string[]> = {
+  "/dashboard": ["Dashboard", "DashboardStats"],
+  "/login": ["LoginForm"],
+  "/signup": ["SignupForm"],
+  "/items": ["ItemList", "ItemForm"],
+  "/search": ["SearchBar", "SearchResults"],
+  "/profile": ["ProfileForm", "AvatarUpload"],
+  "/admin": ["AdminPanel", "UserTable"],
+};
+
+export function ensureRoutePageFiles(
+  routes: string[],
+  components: string[],
+  files: string[]
+): { files: string[]; pageComponentMap: Record<string, string[]> } {
+  const updatedFiles = [...files];
+  const pageComponentMap: Record<string, string[]> = {};
+
+  for (const route of routes) {
+    if (route === "/") continue;
+
+    const pagePath = `src/app${route}/page.tsx`;
+    if (!updatedFiles.includes(pagePath)) {
+      updatedFiles.push(pagePath);
+    }
+
+    const wanted = ROUTE_COMPONENT_MAP_BG[route] || [];
+    pageComponentMap[route] = wanted.filter((c) => components.includes(c));
+  }
+
+  return { files: updatedFiles, pageComponentMap };
+}

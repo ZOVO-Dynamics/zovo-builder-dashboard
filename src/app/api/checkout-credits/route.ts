@@ -26,6 +26,7 @@ export async function POST(req: Request) {
 
   const checkoutSession = await stripe.checkout.sessions.create({
     mode: "payment",
+    managed_payments: { enabled: false },
     customer_email: user.email,
     line_items: [{ price: pack.stripePriceId, quantity: 1 }],
     success_url: "https://www.zovo.ca/dashboard?credits=success",

@@ -5,9 +5,7 @@ export { extractFileErrors, extractBuildFileErrors };
 export { runTypeCheck, runNextBuild };
 import { execSync } from "child_process";
 import fs from "fs";
-import * as ts from "typescript";
 import path from "path";
-import { fixDirectives } from "./DirectiveFixer";
 
 const AI_BRIDGE_URL = process.env.AI_BRIDGE_URL || "https://ai.zovo.ca/api/generate";
 
@@ -42,6 +40,68 @@ function installDependencies(projectDir: string): boolean {
 
 
 
+function stripMalformedUseClientDirective(projectDir: string): string[] {
+  const fixedFiles: string[] = [];
+
+  const srcDir = path.join(projectDir, "src");
+  if (!fs.existsSync(srcDir)) return fixedFiles;
+
+  function walk(dir: string) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules" || entry.name === ".next") continue;
+        walk(fullPath);
+      } else if (/\.(tsx|jsx|ts)$/.test(entry.name)) {
+        const content = fs.readFileSync(fullPath, "utf-8");
+        const lines = content.split("\n");
+        const filtered = lines.filter((line) => !/^use client;?\s*$/.test(line.trim()));
+
+        if (filtered.length !== lines.length) {
+          const cleaned = filtered.join("\n").replace(/\n{3,}/g, "\n\n");
+          fs.writeFileSync(fullPath, cleaned, "utf-8");
+          fixedFiles.push(path.relative(projectDir, fullPath));
+        }
+      }
+    }
+  }
+
+  walk(srcDir);
+  return fixedFiles;
+}
+
+const REACT_HOOKS_PATTERN = /\b(useState|useEffect|useRef|useReducer|useContext|useMemo|useCallback|useLayoutEffect|useTransition|useDeferredValue|useImperativeHandle|useSyncExternalStore|useId)\s*\(/;
+const CUSTOM_HOOK_PATTERN = /\buse[A-Z]\w*\s*\(/;
+
+function fixMissingUseClientDirective(projectDir: string): string[] {
+  const fixedFiles: string[] = [];
+  const srcDir = path.join(projectDir, "src");
+  if (!fs.existsSync(srcDir)) return fixedFiles;
+
+  function walk(dir: string) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules" || entry.name === ".next") continue;
+        walk(fullPath);
+      } else if (/\.(tsx|jsx)$/.test(entry.name)) {
+        const content = fs.readFileSync(fullPath, "utf-8");
+        const trimmed = content.trimStart();
+        const alreadyHasDirective = /^["']use client["'];?/.test(trimmed);
+        const usesHooks = REACT_HOOKS_PATTERN.test(content) || CUSTOM_HOOK_PATTERN.test(content);
+
+        if (usesHooks && !alreadyHasDirective) {
+          const fixed = '"use client";\n\n' + content;
+          fs.writeFileSync(fullPath, fixed, "utf-8");
+          fixedFiles.push(path.relative(projectDir, fullPath));
+        }
+      }
+    }
+  }
+
+  walk(srcDir);
+  return fixedFiles;
+}
 
 
 function fixCommonHallucinations(projectDir: string): string[] {
@@ -292,96 +352,6 @@ Corrige à nouveau en éliminant ces imports : soit tu inlines directement le co
 }
 
 
-function routeExistsForSegments(projectDir: string, segments: string[]): boolean {
-  let currentDir = path.join(projectDir, "src", "app", "api");
-  for (const segment of segments) {
-    if (!fs.existsSync(currentDir)) return false;
-    const isDynamic = /^\$\{[^}]+\}$/.test(segment);
-    if (isDynamic) {
-      const entries = fs.readdirSync(currentDir, { withFileTypes: true });
-      const paramDir = entries.find((e) => e.isDirectory() && /^\[.+\]$/.test(e.name));
-      if (!paramDir) return false;
-      currentDir = path.join(currentDir, paramDir.name);
-    } else {
-      const literalDir = path.join(currentDir, segment);
-      if (!fs.existsSync(literalDir)) return false;
-      currentDir = literalDir;
-    }
-  }
-  return fs.existsSync(path.join(currentDir, "route.ts"));
-}
-
-function toRouteSegment(segment: string): string {
-  const dynamicMatch = segment.match(/^\$\{([^}]+)\}$/);
-  if (!dynamicMatch) return segment;
-  const varExpr = dynamicMatch[1];
-  const paramName = varExpr.split(".").pop() || "id";
-  return `[${paramName}]`;
-}
-
-export function findInventedApiRoutes(projectDir: string, content: string): string[] {
-  const invented: string[] = [];
-  const fetchMatches = content.matchAll(/fetch\(\s*[`"']\/api\/([^`"'\s?]+)/g);
-  for (const match of fetchMatches) {
-    const rawPath = match[1];
-    const segments = rawPath.split("/").filter(Boolean);
-    if (routeExistsForSegments(projectDir, segments)) continue;
-    invented.push("/api/" + rawPath);
-  }
-  return [...new Set(invented)];
-}
-
-export async function generateMissingApiRoute(
-  projectDir: string,
-  apiPath: string,
-  callerContext: string,
-  originalPrompt: string
-): Promise<boolean> {
-  const segments = apiPath.replace(/^\/api\//, "").split("/").filter(Boolean).map(toRouteSegment);
-  const routeDir = path.join(projectDir, "src", "app", "api", ...segments);
-  const routeFile = path.join(routeDir, "route.ts");
-  if (fs.existsSync(routeFile)) return false;
-
-  const schemaPath = path.join(projectDir, "prisma", "schema.prisma");
-  const schemaContext = fs.existsSync(schemaPath)
-    ? `\n\nSchéma Prisma réel du projet (n'invente aucun champ absent d'ici) :\n${fs.readFileSync(schemaPath, "utf-8").slice(0, 2000)}`
-    : "";
-  const deps = readPackageDependencies(projectDir);
-  const depsContext = deps.length > 0 ? `\n\nDépendances npm installées : ${deps.join(", ")}` : "";
-
-  const prompt = `Tu es ZOVO Builder AI. La route API Next.js App Router "${apiPath}" est appelée par du code client mais n'existe pas encore. Crée-la.
-
-Contexte du projet original : ${originalPrompt}
-
-Extrait du code appelant (pour déduire la méthode HTTP, le corps envoyé, et la réponse attendue) :
-${callerContext}
-${schemaContext}${depsContext}
-
-Règles strictes :
-- Retourne UNIQUEMENT le code source du fichier route.ts, sans markdown, sans backticks, sans explication.
-- Utilise le App Router Next.js (export async function GET/POST/PATCH/DELETE selon la méthode utilisée par l'appelant).
-- Utilise Prisma pour toute persistance, avec les modèles réels du schéma listé ci-dessus. N'invente aucun champ ni modèle absent du schéma.
-- Retourne des réponses JSON via NextResponse.json() cohérentes avec ce que le code appelant attend de lire.
-- N'importe QUE des modules/exports qui existent réellement dans les dépendances npm listées ci-dessus.
-- Le code doit être valide et complet.`;
-
-  const content = await callAiBridge(prompt);
-  if (!content) return false;
-
-  fs.mkdirSync(routeDir, { recursive: true });
-  fs.writeFileSync(routeFile, content + "\n", "utf-8");
-  return true;
-}
-
-function extractCallerContext(content: string, apiPath: string): string {
-  const lines = content.split("\n");
-  const idx = lines.findIndex((l) => l.includes(apiPath));
-  if (idx === -1) return content.slice(0, 800);
-  const start = Math.max(0, idx - 15);
-  const end = Math.min(lines.length, idx + 15);
-  return lines.slice(start, end).join("\n");
-}
-
 function fixMissingDatasource(projectDir: string): string[] {
   const fixed: string[] = [];
   const schemaPath = path.join(projectDir, "prisma", "schema.prisma");
@@ -466,7 +436,7 @@ function fixMismatchedPrismaModelNames(projectDir: string): string[] {
   return fixed;
 }
 
-export function fixInconsistentComponentProps(projectDir: string): string[] {
+function fixInconsistentComponentProps(projectDir: string): string[] {
   const fixed: string[] = [];
   const srcDir = path.join(projectDir, "src");
   if (!fs.existsSync(srcDir)) return fixed;
@@ -485,93 +455,27 @@ export function fixInconsistentComponentProps(projectDir: string): string[] {
   }
   walk(srcDir);
 
-  function getParamCount(params: readonly ts.ParameterDeclaration[]): number {
-    if (params.length === 0) return 0;
-    const first = params[0];
-    if (ts.isObjectBindingPattern(first.name) && first.name.elements.length === 0) return 0;
-    return params.length;
+  const acceptsProps = new Map<string, boolean>();
+  for (const filePath of componentFiles) {
+    const content = fs.readFileSync(filePath, "utf-8");
+    const baseName = path.basename(filePath, path.extname(filePath));
+    const funcMatch = content.match(/export\s+default\s+function\s+(\w+)\s*\(([^)]*)\)/);
+    if (funcMatch) acceptsProps.set(baseName, funcMatch[2].trim().length > 0);
   }
 
-  const acceptsProps = new Map<string, boolean>();
-
   for (const filePath of componentFiles) {
-    const src = fs.readFileSync(filePath, "utf-8");
-    const baseName = path.basename(filePath, path.extname(filePath));
-    const sourceFile = ts.createSourceFile(filePath, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-
-    let exportedName: string | null = null;
-    let exportedParams: readonly ts.ParameterDeclaration[] | null = null;
-
-    sourceFile.forEachChild(function visit(node: ts.Node) {
-      if (
-        ts.isFunctionDeclaration(node) &&
-        node.name &&
-        node.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)
-      ) {
-        exportedParams = node.parameters;
-      }
-      if (ts.isExportAssignment(node) && ts.isIdentifier(node.expression)) {
-        exportedName = node.expression.text;
-      }
-      ts.forEachChild(node, visit);
-    });
-
-    if (!exportedParams && exportedName) {
-      const target = exportedName;
-      sourceFile.forEachChild(function find(node: ts.Node) {
-        if (
-          ts.isVariableDeclaration(node) &&
-          ts.isIdentifier(node.name) &&
-          node.name.text === target &&
-          node.initializer &&
-          (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))
-        ) {
-          exportedParams = node.initializer.parameters;
-        }
-        if (ts.isFunctionDeclaration(node) && node.name?.text === target) {
-          exportedParams = node.parameters;
-        }
-        ts.forEachChild(node, find);
+    let content = fs.readFileSync(filePath, "utf-8");
+    let changed = false;
+    for (const [compName, hasProps] of acceptsProps) {
+      if (hasProps) continue;
+      const usageRegex = new RegExp(`<${compName}\\s+[^>]*?(/?)>`, "g");
+      content = content.replace(usageRegex, (match, selfClose) => {
+        if (!match.includes("=")) return match;
+        changed = true;
+        return selfClose === "/" ? `<${compName} />` : `<${compName}>`;
       });
     }
-
-    if (exportedParams) {
-      acceptsProps.set(baseName, getParamCount(exportedParams) > 0);
-    }
-  }
-
-  for (const filePath of componentFiles) {
-    const src = fs.readFileSync(filePath, "utf-8");
-    const sourceFile = ts.createSourceFile(filePath, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-
-    const edits: { start: number; end: number; text: string }[] = [];
-
-    function visitJsx(node: ts.Node) {
-      if (ts.isJsxElement(node)) {
-        const tagName = node.openingElement.tagName.getText(sourceFile);
-        const hasProps = acceptsProps.get(tagName);
-        if (hasProps === false) {
-          edits.push({ start: node.getStart(sourceFile), end: node.getEnd(), text: `<${tagName} />` });
-          return;
-        }
-      }
-      if (ts.isJsxSelfClosingElement(node)) {
-        const tagName = node.tagName.getText(sourceFile);
-        const hasProps = acceptsProps.get(tagName);
-        if (hasProps === false && node.attributes.properties.length > 0) {
-          edits.push({ start: node.getStart(sourceFile), end: node.getEnd(), text: `<${tagName} />` });
-        }
-      }
-      ts.forEachChild(node, visitJsx);
-    }
-    visitJsx(sourceFile);
-
-    if (edits.length > 0) {
-      edits.sort((a, b) => b.start - a.start);
-      let content = src;
-      for (const e of edits) {
-        content = content.slice(0, e.start) + e.text + content.slice(e.end);
-      }
+    if (changed) {
       fs.writeFileSync(filePath, content, "utf-8");
       fixed.push(path.relative(projectDir, filePath));
     }
@@ -607,12 +511,14 @@ export class Validator {
     const jsxExtensionFixes = fixTsFilesContainingJsx(projectDir);
     fixedFiles.push(...jsxExtensionFixes);
 
-    const malformedDirectiveFixes = fixDirectives(projectDir);
-    fixedFiles.push(...malformedDirectiveFixes.map((r) => r.file));
+    const malformedDirectiveFixes = stripMalformedUseClientDirective(projectDir);
+    fixedFiles.push(...malformedDirectiveFixes);
 
     const hallucinationFixes = fixCommonHallucinations(projectDir);
     fixedFiles.push(...hallucinationFixes);
 
+    const useClientFixes = fixMissingUseClientDirective(projectDir);
+    fixedFiles.push(...useClientFixes);
 
     const prismaSchemaFixes = fixMalformedPrismaSchema(projectDir);
     fixedFiles.push(...prismaSchemaFixes);
@@ -621,38 +527,6 @@ export class Validator {
     fixedFiles.push(...datasourceFixes);
     const modelNameFixes = fixMismatchedPrismaModelNames(projectDir);
     fixedFiles.push(...modelNameFixes);
-
-    const srcDirForApi = path.join(projectDir, "src");
-    if (fs.existsSync(srcDirForApi)) {
-      const apiScanFiles: string[] = [];
-      function walkForApi(dir: string) {
-        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-          const fullPath = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
-            if (entry.name === "node_modules" || entry.name === ".next") continue;
-            walkForApi(fullPath);
-          } else if (/\.(tsx|ts)$/.test(entry.name) && !fullPath.includes(path.sep + "api" + path.sep)) {
-            apiScanFiles.push(fullPath);
-          }
-        }
-      }
-      walkForApi(srcDirForApi);
-
-      const seenRoutes = new Set<string>();
-      for (const filePath of apiScanFiles) {
-        const fileContent = fs.readFileSync(filePath, "utf-8");
-        const inventedRoutes = findInventedApiRoutes(projectDir, fileContent);
-        for (const apiPath of inventedRoutes) {
-          if (seenRoutes.has(apiPath)) continue;
-          seenRoutes.add(apiPath);
-          const callerContext = extractCallerContext(fileContent, apiPath);
-          const created = await generateMissingApiRoute(projectDir, apiPath, callerContext, originalPrompt);
-          if (created) {
-            fixedFiles.push("src/app/api" + apiPath.replace(/^\/api/, "") + "/route.ts");
-          }
-        }
-      }
-    }
     const propFixes = fixInconsistentComponentProps(projectDir);
     fixedFiles.push(...propFixes);
 
@@ -675,12 +549,14 @@ export class Validator {
       const repeatedJsxExtensionFixes = fixTsFilesContainingJsx(projectDir);
       fixedFiles.push(...repeatedJsxExtensionFixes);
 
-      const repeatedMalformedDirectiveFixes = fixDirectives(projectDir);
-      fixedFiles.push(...repeatedMalformedDirectiveFixes.map((r) => r.file));
+      const repeatedMalformedDirectiveFixes = stripMalformedUseClientDirective(projectDir);
+      fixedFiles.push(...repeatedMalformedDirectiveFixes);
 
       const repeatedHallucinationFixes = fixCommonHallucinations(projectDir);
       fixedFiles.push(...repeatedHallucinationFixes);
 
+      const repeatedUseClientFixes = fixMissingUseClientDirective(projectDir);
+      fixedFiles.push(...repeatedUseClientFixes);
 
       const repeatedPrismaSchemaFixes = fixMalformedPrismaSchema(projectDir);
       fixedFiles.push(...repeatedPrismaSchemaFixes);

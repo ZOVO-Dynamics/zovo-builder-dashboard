@@ -1,13 +1,6 @@
-import { runEnvironmentDoctor, runCodeDoctor } from "./Doctor";
-import { extractFileErrors, extractBuildFileErrors } from "./ErrorCollector";
-import { runTypeCheck, runNextBuild } from "./BuildRunner";
-export { extractFileErrors, extractBuildFileErrors };
-export { runTypeCheck, runNextBuild };
 import { execSync } from "child_process";
 import fs from "fs";
-import * as ts from "typescript";
 import path from "path";
-import { fixDirectives } from "./DirectiveFixer";
 
 const AI_BRIDGE_URL = process.env.AI_BRIDGE_URL || "https://ai.zovo.ca/api/generate";
 
@@ -38,10 +31,144 @@ function installDependencies(projectDir: string): boolean {
   }
 }
 
+function runTypeCheck(projectDir: string): { ok: boolean; output: string } {
+  try {
+    execSync("./node_modules/.bin/tsc --noEmit --skipLibCheck", {
+      cwd: projectDir,
+      stdio: "pipe",
+      timeout: 60000,
+    });
+    return { ok: true, output: "" };
+  } catch (err: unknown) {
+    const e = err as { stdout?: { toString(): string }; stderr?: { toString(): string } };
+    const output = (e.stdout?.toString() || "") + (e.stderr?.toString() || "");
+    return { ok: false, output };
+  }
+}
 
+function runNextBuild(projectDir: string): { ok: boolean; output: string } {
+  try {
+    execSync("npx prisma generate", { cwd: projectDir, stdio: "pipe", timeout: 30000 });
+  } catch {
+    // on laisse next build échouer et remonter l'erreur Prisma si generate échoue encore
+  }
+  try {
+    execSync("npm run build", {
+      cwd: projectDir,
+      stdio: "pipe",
+      timeout: 180000,
+      env: { ...process.env, PATH: process.env.PATH || "/usr/bin:/usr/local/bin" },
+    });
+    return { ok: true, output: "" };
+  } catch (err: unknown) {
+    const e = err as { stdout?: { toString(): string }; stderr?: { toString(): string } };
+    const output = (e.stdout?.toString() || "") + (e.stderr?.toString() || "");
+    return { ok: false, output };
+  }
+}
 
+export function extractFileErrors(tscOutput: string): Map<string, string[]> {
+  const fileErrors = new Map<string, string[]>();
+  const lines = tscOutput.split("\n");
 
+  for (const line of lines) {
+    const match = line.match(/^(.+?\.tsx?)\(\d+,\d+\):\s*(error.+)$/);
+    if (match) {
+      const [, file, error] = match;
+      const cleanFile = file.trim();
+      if (!fileErrors.has(cleanFile)) {
+        fileErrors.set(cleanFile, []);
+      }
+      fileErrors.get(cleanFile)!.push(error.trim());
+    }
+  }
 
+  return fileErrors;
+}
+
+export function extractBuildFileErrors(buildOutput: string): Map<string, string[]> {
+  const fileErrors = new Map<string, string[]>();
+  const lines = buildOutput.split("\n");
+  let lastErrorMessage = "";
+
+  for (const line of lines) {
+    const errorLine = line.match(/^Error occurred prerendering page.*|^Error:\s*(.+)$/);
+    if (errorLine) {
+      lastErrorMessage = line.trim();
+      continue;
+    }
+    const locationMatch = line.match(/\(((?:src|prisma)\/[^\s:]+\.tsx?):(\d+):(\d+)\)/);
+    if (locationMatch) {
+      const file = locationMatch[1];
+      if (!fileErrors.has(file)) fileErrors.set(file, []);
+      fileErrors.get(file)!.push(lastErrorMessage || "Erreur de build Next.js");
+    }
+  }
+
+  return fileErrors;
+}
+
+function stripMalformedUseClientDirective(projectDir: string): string[] {
+  const fixedFiles: string[] = [];
+  const srcDir = path.join(projectDir, "src");
+  if (!fs.existsSync(srcDir)) return fixedFiles;
+
+  function walk(dir: string) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules" || entry.name === ".next") continue;
+        walk(fullPath);
+      } else if (/\.(tsx|jsx|ts)$/.test(entry.name)) {
+        const content = fs.readFileSync(fullPath, "utf-8");
+        const lines = content.split("\n");
+        const filtered = lines.filter((line) => !/^use client;?\s*$/.test(line.trim()));
+
+        if (filtered.length !== lines.length) {
+          const cleaned = filtered.join("\n").replace(/\n{3,}/g, "\n\n");
+          fs.writeFileSync(fullPath, cleaned, "utf-8");
+          fixedFiles.push(path.relative(projectDir, fullPath));
+        }
+      }
+    }
+  }
+
+  walk(srcDir);
+  return fixedFiles;
+}
+
+const REACT_HOOKS_PATTERN = /\b(useState|useEffect|useRef|useReducer|useContext|useMemo|useCallback|useLayoutEffect|useTransition|useDeferredValue|useImperativeHandle|useSyncExternalStore|useId)\s*\(/;
+const CUSTOM_HOOK_PATTERN = /\buse[A-Z]\w*\s*\(/;
+
+function fixMissingUseClientDirective(projectDir: string): string[] {
+  const fixedFiles: string[] = [];
+  const srcDir = path.join(projectDir, "src");
+  if (!fs.existsSync(srcDir)) return fixedFiles;
+
+  function walk(dir: string) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules" || entry.name === ".next") continue;
+        walk(fullPath);
+      } else if (/\.(tsx|jsx)$/.test(entry.name)) {
+        const content = fs.readFileSync(fullPath, "utf-8");
+        const trimmed = content.trimStart();
+        const alreadyHasDirective = /^["']use client["'];?/.test(trimmed);
+        const usesHooks = REACT_HOOKS_PATTERN.test(content) || CUSTOM_HOOK_PATTERN.test(content);
+
+        if (usesHooks && !alreadyHasDirective) {
+          const fixed = '"use client";\n\n' + content;
+          fs.writeFileSync(fullPath, fixed, "utf-8");
+          fixedFiles.push(path.relative(projectDir, fullPath));
+        }
+      }
+    }
+  }
+
+  walk(srcDir);
+  return fixedFiles;
+}
 
 
 function fixCommonHallucinations(projectDir: string): string[] {
@@ -292,96 +419,6 @@ Corrige à nouveau en éliminant ces imports : soit tu inlines directement le co
 }
 
 
-function routeExistsForSegments(projectDir: string, segments: string[]): boolean {
-  let currentDir = path.join(projectDir, "src", "app", "api");
-  for (const segment of segments) {
-    if (!fs.existsSync(currentDir)) return false;
-    const isDynamic = /^\$\{[^}]+\}$/.test(segment);
-    if (isDynamic) {
-      const entries = fs.readdirSync(currentDir, { withFileTypes: true });
-      const paramDir = entries.find((e) => e.isDirectory() && /^\[.+\]$/.test(e.name));
-      if (!paramDir) return false;
-      currentDir = path.join(currentDir, paramDir.name);
-    } else {
-      const literalDir = path.join(currentDir, segment);
-      if (!fs.existsSync(literalDir)) return false;
-      currentDir = literalDir;
-    }
-  }
-  return fs.existsSync(path.join(currentDir, "route.ts"));
-}
-
-function toRouteSegment(segment: string): string {
-  const dynamicMatch = segment.match(/^\$\{([^}]+)\}$/);
-  if (!dynamicMatch) return segment;
-  const varExpr = dynamicMatch[1];
-  const paramName = varExpr.split(".").pop() || "id";
-  return `[${paramName}]`;
-}
-
-export function findInventedApiRoutes(projectDir: string, content: string): string[] {
-  const invented: string[] = [];
-  const fetchMatches = content.matchAll(/fetch\(\s*[`"']\/api\/([^`"'\s?]+)/g);
-  for (const match of fetchMatches) {
-    const rawPath = match[1];
-    const segments = rawPath.split("/").filter(Boolean);
-    if (routeExistsForSegments(projectDir, segments)) continue;
-    invented.push("/api/" + rawPath);
-  }
-  return [...new Set(invented)];
-}
-
-export async function generateMissingApiRoute(
-  projectDir: string,
-  apiPath: string,
-  callerContext: string,
-  originalPrompt: string
-): Promise<boolean> {
-  const segments = apiPath.replace(/^\/api\//, "").split("/").filter(Boolean).map(toRouteSegment);
-  const routeDir = path.join(projectDir, "src", "app", "api", ...segments);
-  const routeFile = path.join(routeDir, "route.ts");
-  if (fs.existsSync(routeFile)) return false;
-
-  const schemaPath = path.join(projectDir, "prisma", "schema.prisma");
-  const schemaContext = fs.existsSync(schemaPath)
-    ? `\n\nSchéma Prisma réel du projet (n'invente aucun champ absent d'ici) :\n${fs.readFileSync(schemaPath, "utf-8").slice(0, 2000)}`
-    : "";
-  const deps = readPackageDependencies(projectDir);
-  const depsContext = deps.length > 0 ? `\n\nDépendances npm installées : ${deps.join(", ")}` : "";
-
-  const prompt = `Tu es ZOVO Builder AI. La route API Next.js App Router "${apiPath}" est appelée par du code client mais n'existe pas encore. Crée-la.
-
-Contexte du projet original : ${originalPrompt}
-
-Extrait du code appelant (pour déduire la méthode HTTP, le corps envoyé, et la réponse attendue) :
-${callerContext}
-${schemaContext}${depsContext}
-
-Règles strictes :
-- Retourne UNIQUEMENT le code source du fichier route.ts, sans markdown, sans backticks, sans explication.
-- Utilise le App Router Next.js (export async function GET/POST/PATCH/DELETE selon la méthode utilisée par l'appelant).
-- Utilise Prisma pour toute persistance, avec les modèles réels du schéma listé ci-dessus. N'invente aucun champ ni modèle absent du schéma.
-- Retourne des réponses JSON via NextResponse.json() cohérentes avec ce que le code appelant attend de lire.
-- N'importe QUE des modules/exports qui existent réellement dans les dépendances npm listées ci-dessus.
-- Le code doit être valide et complet.`;
-
-  const content = await callAiBridge(prompt);
-  if (!content) return false;
-
-  fs.mkdirSync(routeDir, { recursive: true });
-  fs.writeFileSync(routeFile, content + "\n", "utf-8");
-  return true;
-}
-
-function extractCallerContext(content: string, apiPath: string): string {
-  const lines = content.split("\n");
-  const idx = lines.findIndex((l) => l.includes(apiPath));
-  if (idx === -1) return content.slice(0, 800);
-  const start = Math.max(0, idx - 15);
-  const end = Math.min(lines.length, idx + 15);
-  return lines.slice(start, end).join("\n");
-}
-
 function fixMissingDatasource(projectDir: string): string[] {
   const fixed: string[] = [];
   const schemaPath = path.join(projectDir, "prisma", "schema.prisma");
@@ -466,7 +503,7 @@ function fixMismatchedPrismaModelNames(projectDir: string): string[] {
   return fixed;
 }
 
-export function fixInconsistentComponentProps(projectDir: string): string[] {
+function fixInconsistentComponentProps(projectDir: string): string[] {
   const fixed: string[] = [];
   const srcDir = path.join(projectDir, "src");
   if (!fs.existsSync(srcDir)) return fixed;
@@ -485,93 +522,27 @@ export function fixInconsistentComponentProps(projectDir: string): string[] {
   }
   walk(srcDir);
 
-  function getParamCount(params: readonly ts.ParameterDeclaration[]): number {
-    if (params.length === 0) return 0;
-    const first = params[0];
-    if (ts.isObjectBindingPattern(first.name) && first.name.elements.length === 0) return 0;
-    return params.length;
+  const acceptsProps = new Map<string, boolean>();
+  for (const filePath of componentFiles) {
+    const content = fs.readFileSync(filePath, "utf-8");
+    const baseName = path.basename(filePath, path.extname(filePath));
+    const funcMatch = content.match(/export\s+default\s+function\s+(\w+)\s*\(([^)]*)\)/);
+    if (funcMatch) acceptsProps.set(baseName, funcMatch[2].trim().length > 0);
   }
 
-  const acceptsProps = new Map<string, boolean>();
-
   for (const filePath of componentFiles) {
-    const src = fs.readFileSync(filePath, "utf-8");
-    const baseName = path.basename(filePath, path.extname(filePath));
-    const sourceFile = ts.createSourceFile(filePath, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-
-    let exportedName: string | null = null;
-    let exportedParams: readonly ts.ParameterDeclaration[] | null = null;
-
-    sourceFile.forEachChild(function visit(node: ts.Node) {
-      if (
-        ts.isFunctionDeclaration(node) &&
-        node.name &&
-        node.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)
-      ) {
-        exportedParams = node.parameters;
-      }
-      if (ts.isExportAssignment(node) && ts.isIdentifier(node.expression)) {
-        exportedName = node.expression.text;
-      }
-      ts.forEachChild(node, visit);
-    });
-
-    if (!exportedParams && exportedName) {
-      const target = exportedName;
-      sourceFile.forEachChild(function find(node: ts.Node) {
-        if (
-          ts.isVariableDeclaration(node) &&
-          ts.isIdentifier(node.name) &&
-          node.name.text === target &&
-          node.initializer &&
-          (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))
-        ) {
-          exportedParams = node.initializer.parameters;
-        }
-        if (ts.isFunctionDeclaration(node) && node.name?.text === target) {
-          exportedParams = node.parameters;
-        }
-        ts.forEachChild(node, find);
+    let content = fs.readFileSync(filePath, "utf-8");
+    let changed = false;
+    for (const [compName, hasProps] of acceptsProps) {
+      if (hasProps) continue;
+      const usageRegex = new RegExp(`<${compName}\\s+[^>]*?(/?)>`, "g");
+      content = content.replace(usageRegex, (match, selfClose) => {
+        if (!match.includes("=")) return match;
+        changed = true;
+        return selfClose === "/" ? `<${compName} />` : `<${compName}>`;
       });
     }
-
-    if (exportedParams) {
-      acceptsProps.set(baseName, getParamCount(exportedParams) > 0);
-    }
-  }
-
-  for (const filePath of componentFiles) {
-    const src = fs.readFileSync(filePath, "utf-8");
-    const sourceFile = ts.createSourceFile(filePath, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-
-    const edits: { start: number; end: number; text: string }[] = [];
-
-    function visitJsx(node: ts.Node) {
-      if (ts.isJsxElement(node)) {
-        const tagName = node.openingElement.tagName.getText(sourceFile);
-        const hasProps = acceptsProps.get(tagName);
-        if (hasProps === false) {
-          edits.push({ start: node.getStart(sourceFile), end: node.getEnd(), text: `<${tagName} />` });
-          return;
-        }
-      }
-      if (ts.isJsxSelfClosingElement(node)) {
-        const tagName = node.tagName.getText(sourceFile);
-        const hasProps = acceptsProps.get(tagName);
-        if (hasProps === false && node.attributes.properties.length > 0) {
-          edits.push({ start: node.getStart(sourceFile), end: node.getEnd(), text: `<${tagName} />` });
-        }
-      }
-      ts.forEachChild(node, visitJsx);
-    }
-    visitJsx(sourceFile);
-
-    if (edits.length > 0) {
-      edits.sort((a, b) => b.start - a.start);
-      let content = src;
-      for (const e of edits) {
-        content = content.slice(0, e.start) + e.text + content.slice(e.end);
-      }
+    if (changed) {
       fs.writeFileSync(filePath, content, "utf-8");
       fixed.push(path.relative(projectDir, filePath));
     }
@@ -588,31 +559,23 @@ export class Validator {
     maxAttempts: number = 2
   ): Promise<ValidationResult> {
     const fixedFiles: string[] = [];
-    const envReport = runEnvironmentDoctor();
-    if (!envReport.ok) {
-      const fatalIssues = envReport.issues.filter((i: { fatal: boolean }) => i.fatal).map((i: { message: string }) => i.message);
-      return { valid: false, errors: fatalIssues, fixedFiles: [] };
-    }
-
 
     const installed = installDependencies(projectDir);
     if (!installed) {
       return { valid: false, errors: ["Échec de l'installation des dépendances (npm install)"], fixedFiles };
     }
 
-
-    const doctorFixes = runCodeDoctor(projectDir);
-    fixedFiles.push(...doctorFixes);
-
     const jsxExtensionFixes = fixTsFilesContainingJsx(projectDir);
     fixedFiles.push(...jsxExtensionFixes);
 
-    const malformedDirectiveFixes = fixDirectives(projectDir);
-    fixedFiles.push(...malformedDirectiveFixes.map((r) => r.file));
+    const malformedDirectiveFixes = stripMalformedUseClientDirective(projectDir);
+    fixedFiles.push(...malformedDirectiveFixes);
 
     const hallucinationFixes = fixCommonHallucinations(projectDir);
     fixedFiles.push(...hallucinationFixes);
 
+    const useClientFixes = fixMissingUseClientDirective(projectDir);
+    fixedFiles.push(...useClientFixes);
 
     const prismaSchemaFixes = fixMalformedPrismaSchema(projectDir);
     fixedFiles.push(...prismaSchemaFixes);
@@ -621,53 +584,8 @@ export class Validator {
     fixedFiles.push(...datasourceFixes);
     const modelNameFixes = fixMismatchedPrismaModelNames(projectDir);
     fixedFiles.push(...modelNameFixes);
-
-    const srcDirForApi = path.join(projectDir, "src");
-    if (fs.existsSync(srcDirForApi)) {
-      const apiScanFiles: string[] = [];
-      function walkForApi(dir: string) {
-        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-          const fullPath = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
-            if (entry.name === "node_modules" || entry.name === ".next") continue;
-            walkForApi(fullPath);
-          } else if (/\.(tsx|ts)$/.test(entry.name) && !fullPath.includes(path.sep + "api" + path.sep)) {
-            apiScanFiles.push(fullPath);
-          }
-        }
-      }
-      walkForApi(srcDirForApi);
-
-      const seenRoutes = new Set<string>();
-      for (const filePath of apiScanFiles) {
-        const fileContent = fs.readFileSync(filePath, "utf-8");
-        const inventedRoutes = findInventedApiRoutes(projectDir, fileContent);
-        for (const apiPath of inventedRoutes) {
-          if (seenRoutes.has(apiPath)) continue;
-          seenRoutes.add(apiPath);
-          const callerContext = extractCallerContext(fileContent, apiPath);
-          const created = await generateMissingApiRoute(projectDir, apiPath, callerContext, originalPrompt);
-          if (created) {
-            fixedFiles.push("src/app/api" + apiPath.replace(/^\/api/, "") + "/route.ts");
-          }
-        }
-      }
-    }
     const propFixes = fixInconsistentComponentProps(projectDir);
     fixedFiles.push(...propFixes);
-
-    let blueprintForRoutes: any = {};
-    try {
-      const bpPath = path.join(projectDir, ".zovo-blueprint.json");
-      if (fs.existsSync(bpPath)) {
-        blueprintForRoutes = JSON.parse(fs.readFileSync(bpPath, "utf-8"));
-      }
-    } catch {}
-    const fixedRoutes = fixMissingRoutePages(projectDir, blueprintForRoutes);
-    if (fixedRoutes.length > 0) {
-      console.log(`Pages générées automatiquement: ${fixedRoutes.join(", ")}`);
-      fixedFiles.push(...fixedRoutes.map((r) => `src/app${r}/page.tsx`));
-    }
 
     let attempt = 0;
 
@@ -675,12 +593,14 @@ export class Validator {
       const repeatedJsxExtensionFixes = fixTsFilesContainingJsx(projectDir);
       fixedFiles.push(...repeatedJsxExtensionFixes);
 
-      const repeatedMalformedDirectiveFixes = fixDirectives(projectDir);
-      fixedFiles.push(...repeatedMalformedDirectiveFixes.map((r) => r.file));
+      const repeatedMalformedDirectiveFixes = stripMalformedUseClientDirective(projectDir);
+      fixedFiles.push(...repeatedMalformedDirectiveFixes);
 
       const repeatedHallucinationFixes = fixCommonHallucinations(projectDir);
       fixedFiles.push(...repeatedHallucinationFixes);
 
+      const repeatedUseClientFixes = fixMissingUseClientDirective(projectDir);
+      fixedFiles.push(...repeatedUseClientFixes);
 
       const repeatedPrismaSchemaFixes = fixMalformedPrismaSchema(projectDir);
       fixedFiles.push(...repeatedPrismaSchemaFixes);
@@ -749,230 +669,3 @@ export class Validator {
 
 const validatorInstance = new Validator();
 export default validatorInstance;
-
-const ROUTE_COMPONENT_MAP: Record<string, string[]> = {
-  "/dashboard": ["Dashboard", "DashboardStats"],
-  "/login": ["LoginForm"],
-  "/signup": ["SignupForm"],
-  "/items": ["ItemList", "ItemForm"],
-  "/search": ["SearchBar", "SearchResults"],
-  "/profile": ["ProfileForm", "AvatarUpload"],
-  "/admin": ["AdminPanel", "UserTable"],
-};
-
-export function fixMissingRoutePages(
-  projectPath: string,
-  blueprint: { routes?: string[]; components?: string[] }
-): string[] {
-  const fs = require("fs");
-  const path = require("path");
-  const created: string[] = [];
-  const routes = (blueprint.routes || []).filter((r) => r !== "/");
-
-  for (const route of routes) {
-    const pagePath = path.join(projectPath, "src/app", route.slice(1), "page.tsx");
-    if (fs.existsSync(pagePath)) continue;
-
-    const wantedComponents = ROUTE_COMPONENT_MAP[route] || [];
-    const availableComponents = wantedComponents.filter((c) =>
-      (blueprint.components || []).includes(c)
-    );
-
-    if (availableComponents.length === 0) continue;
-
-    const imports = availableComponents
-      .map((c) => `import ${c} from "@/components/${c}";`)
-      .join("\n");
-    const jsx = availableComponents.map((c) => `      <${c} />`).join("\n");
-
-    const content = `${imports}
-
-export default function Page() {
-  return (
-    <div>
-${jsx}
-    </div>
-  );
-}
-`;
-
-    fs.mkdirSync(path.dirname(pagePath), { recursive: true });
-    fs.writeFileSync(pagePath, content, "utf-8");
-    created.push(route);
-  }
-
-  return created;
-}
-
-const ROUTE_FORBIDDEN_KEYWORDS: Record<string, string[]> = {
-  "/": ["ProfilePage", "handleDeleteAccount", "Supprimer le compte", "AdminPanel", "UserTable"],
-  "/login": ["ProfilePage", "AdminPanel", "handleDeleteAccount"],
-  "/signup": ["ProfilePage", "AdminPanel", "handleDeleteAccount"],
-  "/admin": ["LoginForm", "SignupForm", "handleDeleteAccount"],
-  "/dashboard": ["LoginForm", "SignupForm"],
-};
-
-export function detectMismatchedPageContent(
-  projectDir: string,
-  routes: string[]
-): string[] {
-  const suspicious: string[] = [];
-
-  for (const route of routes) {
-    const routeSegment = route === "/" ? "" : route.slice(1);
-    const pagePath = path.join(projectDir, "src/app", routeSegment, "page.tsx");
-    if (!fs.existsSync(pagePath)) continue;
-
-    const content = fs.readFileSync(pagePath, "utf-8");
-    const forbidden = ROUTE_FORBIDDEN_KEYWORDS[route] || [];
-
-    for (const keyword of forbidden) {
-      if (content.includes(keyword)) {
-        suspicious.push(
-          `${route}/page.tsx contient "${keyword}", incohérent avec cette route`
-        );
-      }
-    }
-  }
-
-  return suspicious;
-}
-
-// Mots-clés sémantiques attendus dans le texte visible de chaque route (couche 2)
-const ROUTE_EXPECTED_SEMANTICS: Record<string, string[]> = {
-  "/": ["bienvenue", "accueil", "connecter", "inscrire"],
-  "/login": ["connexion", "email", "mot de passe", "connecter"],
-  "/signup": ["inscription", "créer", "compte"],
-  "/admin": ["admin", "utilisateur", "gestion"],
-  "/profile": ["profil", "compte", "paramètre"],
-  "/dashboard": ["tableau", "dashboard", "statistique"],
-  "/search": ["recherche", "résultat"],
-};
-
-interface HallucinationCheckResult {
-  route: string;
-  reasons: string[];
-  needsAiReview: boolean;
-}
-
-export function detectHallucinatedPageContent(
-  projectDir: string,
-  routes: string[],
-  pageComponentMap: Record<string, string[]> = {}
-): HallucinationCheckResult[] {
-  const results: HallucinationCheckResult[] = [];
-
-  for (const route of routes) {
-    if (route === "/") continue;
-    const routeSegment = route.slice(1);
-    const pagePath = path.join(projectDir, "src/app", routeSegment, "page.tsx");
-    if (!fs.existsSync(pagePath)) continue;
-
-    const content = fs.readFileSync(pagePath, "utf-8");
-    const reasons: string[] = [];
-
-    // Couche 1 : vérification structurelle des imports vs blueprint
-    const actualImports = [...content.matchAll(/from ["']@\/components\/(\w+)["']/g)].map((m) => m[1]);
-    const expectedComponents = pageComponentMap[route] || [];
-    if (expectedComponents.length > 0 && actualImports.length > 0) {
-      const unexpected = actualImports.filter((c) => !expectedComponents.includes(c));
-      if (unexpected.length > 0) {
-        reasons.push(
-          `importe ${unexpected.join(", ")} au lieu des composants attendus (${expectedComponents.join(", ")})`
-        );
-      }
-    }
-
-    // Couche 2 : vérification sémantique légère du texte visible
-    const expectedWords = ROUTE_EXPECTED_SEMANTICS[route];
-    if (expectedWords) {
-      const lowerContent = content.toLowerCase();
-      const hasAnyExpectedWord = expectedWords.some((w) => lowerContent.includes(w));
-      if (!hasAnyExpectedWord && content.length > 200) {
-        reasons.push(
-          `aucun mot-clé attendu pour cette route trouvé (${expectedWords.join("/")})`
-        );
-      }
-    }
-
-    if (reasons.length > 0) {
-      results.push({ route, reasons, needsAiReview: true });
-    }
-  }
-
-  return results;
-}
-
-// Couche 3 : relecture IA, appelée UNIQUEMENT sur les fichiers déjà suspects (coût minimal)
-export async function aiReviewSuspiciousPage(
-  route: string,
-  pageContent: string,
-  aiBridgeUrl: string
-): Promise<{ isHallucinated: boolean; explanation: string }> {
-  try {
-    const prompt = `Voici le contenu d'un fichier page.tsx qui doit correspondre à la route "${route}" d'une application web.
-
-Vérifie si ce code semble cohérent avec cette route, ou s'il contient par erreur le contenu d'une AUTRE page (ex: une page de login qui contient du code de profil utilisateur).
-
-Réponds UNIQUEMENT en JSON strict, sans markdown : {"isHallucinated": true ou false, "explanation": "raison courte"}
-
-Code à analyser :
-${pageContent.slice(0, 3000)}`;
-
-    const response = await fetch(aiBridgeUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt }),
-      signal: AbortSignal.timeout(30000),
-    });
-
-    if (!response.ok) {
-      return { isHallucinated: false, explanation: "Revue IA indisponible, validation ignorée" };
-    }
-
-    const data = await response.json();
-    let raw = (data.response || "").trim();
-    raw = raw.replace(/^```json\n?/i, "").replace(/```$/i, "").trim();
-    const parsed = JSON.parse(raw);
-
-    return {
-      isHallucinated: Boolean(parsed.isHallucinated),
-      explanation: parsed.explanation || "",
-    };
-  } catch {
-    return { isHallucinated: false, explanation: "Erreur lors de la revue IA, validation ignorée" };
-  }
-}
-
-// Fonction combinée : couches 1+2 d'abord, puis couche 3 seulement si nécessaire
-export async function detectHallucinationWithAiFallback(
-  projectDir: string,
-  routes: string[],
-  pageComponentMap: Record<string, string[]> = {},
-  aiBridgeUrl?: string
-): Promise<string[]> {
-  const structuralHits = detectHallucinatedPageContent(projectDir, routes, pageComponentMap);
-  if (structuralHits.length === 0) return [];
-
-  const confirmed: string[] = [];
-
-  for (const hit of structuralHits) {
-    if (!aiBridgeUrl) {
-      // Sans AI bridge configuré, on se fie uniquement aux couches 1+2
-      confirmed.push(`${hit.route}: ${hit.reasons.join("; ")}`);
-      continue;
-    }
-
-    const routeSegment = hit.route.slice(1);
-    const pagePath = path.join(projectDir, "src/app", routeSegment, "page.tsx");
-    const content = fs.readFileSync(pagePath, "utf-8");
-
-    const aiResult = await aiReviewSuspiciousPage(hit.route, content, aiBridgeUrl);
-    if (aiResult.isHallucinated) {
-      confirmed.push(`${hit.route}: ${hit.reasons.join("; ")} [confirmé par IA: ${aiResult.explanation}]`);
-    }
-    // Si l'IA dit que ce n'est pas une hallucination, on ne le signale pas (faux positif des couches 1+2 filtré)
-  }
-
-  return confirmed;
-}

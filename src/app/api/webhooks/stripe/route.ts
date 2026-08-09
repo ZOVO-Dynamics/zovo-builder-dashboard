@@ -41,6 +41,32 @@ export async function POST(req: NextRequest) {
         const userId = session.metadata?.userId;
         const planId = session.metadata?.planId;
 
+        const creditPackId = session.metadata?.creditPackId;
+        const creditsToAdd = session.metadata?.credits ? parseInt(session.metadata.credits, 10) : 0;
+
+        if (userId && creditPackId && creditsToAdd > 0) {
+          const currentUser = await prisma.user.findUnique({ where: { id: userId } });
+          const currentBalance = currentUser?.creditsBalance ?? 0;
+          const newBalance = currentBalance + creditsToAdd;
+
+          await prisma.creditTransaction.create({
+            data: {
+              userId,
+              type: "PURCHASE",
+              amount: creditsToAdd,
+              balanceAfter: newBalance,
+              stripePaymentIntentId: String(session.payment_intent || ""),
+            },
+          });
+
+          await prisma.user.update({
+            where: { id: userId },
+            data: { creditsBalance: newBalance },
+          });
+
+          break;
+        }
+
         if (!userId || !session.subscription) break;
 
         const subscriptionId = session.subscription as string;
@@ -175,6 +201,20 @@ export async function POST(req: NextRequest) {
                 : null,
             cancelAtPeriodEnd:
               subscription.cancel_at_period_end,
+          },
+        });
+
+        break;
+      }
+
+      case "account.updated": {
+        const account = event.data.object as Stripe.Account;
+
+        await prisma.connectAccount.updateMany({
+          where: { stripeConnectAccountId: account.id },
+          data: {
+            onboardingComplete: !!account.details_submitted,
+            payoutsEnabled: !!account.payouts_enabled,
           },
         });
 

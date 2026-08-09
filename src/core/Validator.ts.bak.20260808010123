@@ -292,96 +292,6 @@ Corrige à nouveau en éliminant ces imports : soit tu inlines directement le co
 }
 
 
-function routeExistsForSegments(projectDir: string, segments: string[]): boolean {
-  let currentDir = path.join(projectDir, "src", "app", "api");
-  for (const segment of segments) {
-    if (!fs.existsSync(currentDir)) return false;
-    const isDynamic = /^\$\{[^}]+\}$/.test(segment);
-    if (isDynamic) {
-      const entries = fs.readdirSync(currentDir, { withFileTypes: true });
-      const paramDir = entries.find((e) => e.isDirectory() && /^\[.+\]$/.test(e.name));
-      if (!paramDir) return false;
-      currentDir = path.join(currentDir, paramDir.name);
-    } else {
-      const literalDir = path.join(currentDir, segment);
-      if (!fs.existsSync(literalDir)) return false;
-      currentDir = literalDir;
-    }
-  }
-  return fs.existsSync(path.join(currentDir, "route.ts"));
-}
-
-function toRouteSegment(segment: string): string {
-  const dynamicMatch = segment.match(/^\$\{([^}]+)\}$/);
-  if (!dynamicMatch) return segment;
-  const varExpr = dynamicMatch[1];
-  const paramName = varExpr.split(".").pop() || "id";
-  return `[${paramName}]`;
-}
-
-export function findInventedApiRoutes(projectDir: string, content: string): string[] {
-  const invented: string[] = [];
-  const fetchMatches = content.matchAll(/fetch\(\s*[`"']\/api\/([^`"'\s?]+)/g);
-  for (const match of fetchMatches) {
-    const rawPath = match[1];
-    const segments = rawPath.split("/").filter(Boolean);
-    if (routeExistsForSegments(projectDir, segments)) continue;
-    invented.push("/api/" + rawPath);
-  }
-  return [...new Set(invented)];
-}
-
-export async function generateMissingApiRoute(
-  projectDir: string,
-  apiPath: string,
-  callerContext: string,
-  originalPrompt: string
-): Promise<boolean> {
-  const segments = apiPath.replace(/^\/api\//, "").split("/").filter(Boolean).map(toRouteSegment);
-  const routeDir = path.join(projectDir, "src", "app", "api", ...segments);
-  const routeFile = path.join(routeDir, "route.ts");
-  if (fs.existsSync(routeFile)) return false;
-
-  const schemaPath = path.join(projectDir, "prisma", "schema.prisma");
-  const schemaContext = fs.existsSync(schemaPath)
-    ? `\n\nSchéma Prisma réel du projet (n'invente aucun champ absent d'ici) :\n${fs.readFileSync(schemaPath, "utf-8").slice(0, 2000)}`
-    : "";
-  const deps = readPackageDependencies(projectDir);
-  const depsContext = deps.length > 0 ? `\n\nDépendances npm installées : ${deps.join(", ")}` : "";
-
-  const prompt = `Tu es ZOVO Builder AI. La route API Next.js App Router "${apiPath}" est appelée par du code client mais n'existe pas encore. Crée-la.
-
-Contexte du projet original : ${originalPrompt}
-
-Extrait du code appelant (pour déduire la méthode HTTP, le corps envoyé, et la réponse attendue) :
-${callerContext}
-${schemaContext}${depsContext}
-
-Règles strictes :
-- Retourne UNIQUEMENT le code source du fichier route.ts, sans markdown, sans backticks, sans explication.
-- Utilise le App Router Next.js (export async function GET/POST/PATCH/DELETE selon la méthode utilisée par l'appelant).
-- Utilise Prisma pour toute persistance, avec les modèles réels du schéma listé ci-dessus. N'invente aucun champ ni modèle absent du schéma.
-- Retourne des réponses JSON via NextResponse.json() cohérentes avec ce que le code appelant attend de lire.
-- N'importe QUE des modules/exports qui existent réellement dans les dépendances npm listées ci-dessus.
-- Le code doit être valide et complet.`;
-
-  const content = await callAiBridge(prompt);
-  if (!content) return false;
-
-  fs.mkdirSync(routeDir, { recursive: true });
-  fs.writeFileSync(routeFile, content + "\n", "utf-8");
-  return true;
-}
-
-function extractCallerContext(content: string, apiPath: string): string {
-  const lines = content.split("\n");
-  const idx = lines.findIndex((l) => l.includes(apiPath));
-  if (idx === -1) return content.slice(0, 800);
-  const start = Math.max(0, idx - 15);
-  const end = Math.min(lines.length, idx + 15);
-  return lines.slice(start, end).join("\n");
-}
-
 function fixMissingDatasource(projectDir: string): string[] {
   const fixed: string[] = [];
   const schemaPath = path.join(projectDir, "prisma", "schema.prisma");
@@ -547,19 +457,13 @@ export function fixInconsistentComponentProps(projectDir: string): string[] {
     const edits: { start: number; end: number; text: string }[] = [];
 
     function visitJsx(node: ts.Node) {
-      if (ts.isJsxElement(node)) {
-        const tagName = node.openingElement.tagName.getText(sourceFile);
-        const hasProps = acceptsProps.get(tagName);
-        if (hasProps === false) {
-          edits.push({ start: node.getStart(sourceFile), end: node.getEnd(), text: `<${tagName} />` });
-          return;
-        }
-      }
-      if (ts.isJsxSelfClosingElement(node)) {
+      if (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) {
         const tagName = node.tagName.getText(sourceFile);
         const hasProps = acceptsProps.get(tagName);
         if (hasProps === false && node.attributes.properties.length > 0) {
-          edits.push({ start: node.getStart(sourceFile), end: node.getEnd(), text: `<${tagName} />` });
+          const isSelfClosing = ts.isJsxSelfClosingElement(node);
+          const replacement = isSelfClosing ? `<${tagName} />` : `<${tagName}>`;
+          edits.push({ start: node.getStart(sourceFile), end: node.getEnd(), text: replacement });
         }
       }
       ts.forEachChild(node, visitJsx);
@@ -621,38 +525,6 @@ export class Validator {
     fixedFiles.push(...datasourceFixes);
     const modelNameFixes = fixMismatchedPrismaModelNames(projectDir);
     fixedFiles.push(...modelNameFixes);
-
-    const srcDirForApi = path.join(projectDir, "src");
-    if (fs.existsSync(srcDirForApi)) {
-      const apiScanFiles: string[] = [];
-      function walkForApi(dir: string) {
-        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-          const fullPath = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
-            if (entry.name === "node_modules" || entry.name === ".next") continue;
-            walkForApi(fullPath);
-          } else if (/\.(tsx|ts)$/.test(entry.name) && !fullPath.includes(path.sep + "api" + path.sep)) {
-            apiScanFiles.push(fullPath);
-          }
-        }
-      }
-      walkForApi(srcDirForApi);
-
-      const seenRoutes = new Set<string>();
-      for (const filePath of apiScanFiles) {
-        const fileContent = fs.readFileSync(filePath, "utf-8");
-        const inventedRoutes = findInventedApiRoutes(projectDir, fileContent);
-        for (const apiPath of inventedRoutes) {
-          if (seenRoutes.has(apiPath)) continue;
-          seenRoutes.add(apiPath);
-          const callerContext = extractCallerContext(fileContent, apiPath);
-          const created = await generateMissingApiRoute(projectDir, apiPath, callerContext, originalPrompt);
-          if (created) {
-            fixedFiles.push("src/app/api" + apiPath.replace(/^\/api/, "") + "/route.ts");
-          }
-        }
-      }
-    }
     const propFixes = fixInconsistentComponentProps(projectDir);
     fixedFiles.push(...propFixes);
 

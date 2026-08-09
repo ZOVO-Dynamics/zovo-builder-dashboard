@@ -1,0 +1,66 @@
+import fs from "fs";
+import path from "path";
+
+const REACT_HOOKS_PATTERN = /\b(useState|useEffect|useRef|useReducer|useContext|useMemo|useCallback|useLayoutEffect|useTransition|useDeferredValue|useImperativeHandle|useSyncExternalStore|useId)\s*\(/;
+const CUSTOM_HOOK_PATTERN = /\buse[A-Z]\w*\s*\(/;
+
+export function stripMalformedUseClientDirective(projectDir: string): string[] {
+  const fixedFiles: string[] = [];
+
+  const srcDir = path.join(projectDir, "src");
+  if (!fs.existsSync(srcDir)) return fixedFiles;
+
+  function walk(dir: string) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules" || entry.name === ".next") continue;
+        walk(fullPath);
+      } else if (/\.(tsx|jsx|ts)$/.test(entry.name)) {
+        const content = fs.readFileSync(fullPath, "utf-8");
+        const lines = content.split("\n");
+        const filtered = lines.filter((line) => !/^use client;?\s*$/.test(line.trim()));
+
+        if (filtered.length !== lines.length) {
+          const cleaned = filtered.join("\n").replace(/\n{3,}/g, "\n\n");
+          fs.writeFileSync(fullPath, cleaned, "utf-8");
+          fixedFiles.push(path.relative(projectDir, fullPath));
+        }
+      }
+    }
+  }
+
+  walk(srcDir);
+  return fixedFiles;
+}
+
+export function fixMissingUseClientDirective(projectDir: string): string[] {
+  const fixedFiles: string[] = [];
+
+  const srcDir = path.join(projectDir, "src");
+  if (!fs.existsSync(srcDir)) return fixedFiles;
+
+  function walk(dir: string) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules" || entry.name === ".next") continue;
+        walk(fullPath);
+      } else if (/\.(tsx|jsx)$/.test(entry.name)) {
+        const content = fs.readFileSync(fullPath, "utf-8");
+        const trimmed = content.trimStart();
+        const alreadyHasDirective = /^["']use client["'];?/.test(trimmed);
+        const usesHooks = REACT_HOOKS_PATTERN.test(content) || CUSTOM_HOOK_PATTERN.test(content);
+
+        if (usesHooks && !alreadyHasDirective) {
+          const fixed = '"use client";\n\n' + content;
+          fs.writeFileSync(fullPath, fixed, "utf-8");
+          fixedFiles.push(path.relative(projectDir, fullPath));
+        }
+      }
+    }
+  }
+
+  walk(srcDir);
+  return fixedFiles;
+}
