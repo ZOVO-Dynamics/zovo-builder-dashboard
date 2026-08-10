@@ -192,18 +192,28 @@ export default function RepairCard({ projectId, validationFailed }: RepairCardPr
 
   return (
     <div className="rounded-lg border border-[#2A2A2E] bg-[#16161A] p-5 space-y-3">
-      <p className="text-sm font-medium text-[#F5F1E8]">🛠️ Correction & Validation</p>
+      <p className="text-sm font-medium text-[#F5F1E8]">🛠️ Correction ZOVO — 29,99 $</p>
       <p className="text-sm text-[#9B9B95]">
-        Votre projet contient des erreurs ? ZOVO peut analyser et corriger automatiquement votre projet.
-        Aucune connaissance en programmation nécessaire.
+        Votre projet rencontre une erreur ? Notre équipe de spécialistes s&apos;en charge.
       </p>
-      <p className="text-lg font-bold text-[#E8C34A]">29,99 $ CAD</p>
+      <p className="text-sm text-[#9B9B95]">
+        Pour 29,99 $, nous analysons le problème, effectuons les corrections nécessaires et vérifions votre projet avant de vous le remettre.
+      </p>
+      <p className="text-sm text-[#9B9B95]">
+        Avec ZOVO, chaque correction est vérifiée par notre équipe et accompagnée d&apos;une validation finale « OK ».
+      </p>
+      <ul className="text-sm text-[#9B9B95] space-y-1">
+        <li>✓ Analyse du problème</li>
+        <li>✓ Correction par nos spécialistes</li>
+        <li>✓ Vérification complète</li>
+        <li>✓ Validation finale « OK »</li>
+      </ul>
       <button
         onClick={handleStartRepair}
         disabled={checkoutLoading}
         className="rounded-md bg-[#C9A227] hover:bg-[#E8C34A] disabled:opacity-40 px-4 py-2 text-sm font-medium text-[#0A0A0C]"
       >
-        {checkoutLoading ? "Redirection vers le paiement..." : "Corriger & Valider — 29,99 $ CAD"}
+        {checkoutLoading ? "Redirection vers le paiement..." : "29,99 $ — Confiez-nous la correction, nous nous occupons du reste."}
       </button>
       {checkoutError && (
         <div className="rounded-lg bg-red-950/40 border border-red-800/60 p-3 text-sm text-red-300">
