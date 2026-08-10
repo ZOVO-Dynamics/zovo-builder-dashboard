@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { estimateProjectValue } from "@/core/ValueEstimator";
 
 export async function GET(
   req: NextRequest,
@@ -25,5 +26,20 @@ export async function GET(
     return NextResponse.json({ error: "Projet introuvable ou accès refusé" }, { status: 403 });
   }
 
-  return NextResponse.json({ project });
+  // Estimation dérivée du blueprint de la dernière version — aucun appel IA,
+  // calcul déterministe à partir de données déjà persistées.
+  const latestBlueprint = project.versions[0]?.blueprint as
+    | { files?: string[]; components?: string[]; dependencies?: string[] }
+    | null
+    | undefined;
+
+  const valueEstimate = latestBlueprint
+    ? estimateProjectValue({
+        files: latestBlueprint.files ?? [],
+        components: latestBlueprint.components ?? [],
+        dependencies: latestBlueprint.dependencies ?? [],
+      })
+    : null;
+
+  return NextResponse.json({ project, valueEstimate });
 }

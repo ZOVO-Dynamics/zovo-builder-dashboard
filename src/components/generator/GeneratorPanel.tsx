@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import RepairCard from "./RepairCard";
+import ValueCounter from "./ValueCounter";
 
 interface BlueprintResult {
   success: boolean;
@@ -471,6 +472,8 @@ export default function GeneratorPanel() {
           </select>
         </div>
       )}
+
+      <ValueCounter projectId={selectedProject !== "new" ? selectedProject : null} />
 
       <textarea
         autoComplete="off"
