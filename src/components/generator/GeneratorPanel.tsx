@@ -438,11 +438,6 @@ export default function GeneratorPanel() {
         <h2 style={{ fontFamily: "var(--font-display)" }} className="mt-1 text-lg font-bold">Generer une application</h2>
       </div>
 
-      <RepairCard
-        projectId={result?.projectRecordId ?? null}
-        validationFailed={Boolean(result?.success && result.validation && result.validation.valid === false)}
-      />
-
       {stuckJob && (
         <div className="rounded-lg border border-amber-700/60 bg-amber-950/40 p-3 space-y-2">
           <p className="text-sm text-amber-300">
@@ -598,6 +593,11 @@ export default function GeneratorPanel() {
               {deployLoading ? `${deployLabel || "Deploiement..."}${deployPercent !== null ? ` (${deployPercent}%)` : ""}` : "ZOVO Deploy"}
             </button>
           </div>
+
+          <RepairCard
+            projectId={result?.projectRecordId ?? null}
+            validationFailed={Boolean(result?.success && result.validation && result.validation.valid === false)}
+          />
 
           {deployError && (
             <div className="rounded-lg bg-red-950/40 border border-red-800/60 p-3 text-sm text-red-300">
