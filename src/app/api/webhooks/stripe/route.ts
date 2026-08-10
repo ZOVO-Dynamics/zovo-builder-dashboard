@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import Stripe from "stripe";
 import { Resend } from "resend";
 import { runRepairJob } from "@/core/RepairEngine";
+import { getPlacementDurationHours } from "@/lib/marketplace/sponsoredPricing";
+import { SponsoredPlacementType } from "@prisma/client";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -41,6 +43,90 @@ export async function POST(req: NextRequest) {
 
         const userId = session.metadata?.userId;
         const planId = session.metadata?.planId;
+
+        // ZOVO Marketplace : achat d'un placement sponsorisé (paiement unique).
+        // Idempotence : ignore si déjà ACTIVE (webhook re-livré par Stripe).
+        if (session.metadata?.kind === "sponsored_placement") {
+          const placement = await prisma.sponsoredPlacement.findUnique({
+            where: { stripeCheckoutSessionId: session.id },
+          });
+
+          if (!placement) {
+            console.error(
+              `STRIPE WEBHOOK: session ${session.id} référence un SponsoredPlacement introuvable`
+            );
+            break;
+          }
+
+          if (placement.status === "ACTIVE") {
+            console.log(`[SponsoredPlacement: ${placement.id}] webhook re-livré, ignoré (idempotence)`);
+            break;
+          }
+
+          const durationHours = getPlacementDurationHours(
+            placement.placementType as SponsoredPlacementType
+          );
+          const startsAt = new Date();
+          const endsAt = new Date(startsAt.getTime() + durationHours * 60 * 60 * 1000);
+
+          await prisma.sponsoredPlacement.update({
+            where: { id: placement.id },
+            data: {
+              status: "ACTIVE",
+              startsAt,
+              endsAt,
+              stripePaymentIntentId: String(session.payment_intent || "") || null,
+            },
+          });
+
+          console.log(`[SponsoredPlacement: ${placement.id}] activé jusqu'au ${endsAt.toISOString()}`);
+          break;
+        }
+
+        // ZOVO Marketplace : achat d'un produit vendeur (paiement unique).
+        // Idempotence : un même événement/session Stripe ne doit jamais
+        // marquer la commande payée deux fois ni créditer le vendeur deux fois.
+        if (session.metadata?.kind === "marketplace_order") {
+          const order = await prisma.marketplaceOrder.findUnique({
+            where: { stripeCheckoutSessionId: session.id },
+          });
+
+          if (!order) {
+            console.error(
+              `STRIPE WEBHOOK: session ${session.id} référence une MarketplaceOrder introuvable`
+            );
+            break;
+          }
+
+          if (order.status === "PAID") {
+            console.log(`[MarketplaceOrder: ${order.id}] webhook re-livré, ignoré (idempotence)`);
+            break;
+          }
+
+          await prisma.$transaction([
+            prisma.marketplaceOrder.update({
+              where: { id: order.id },
+              data: {
+                status: "PAID",
+                stripePaymentIntentId: String(session.payment_intent || "") || null,
+              },
+            }),
+            prisma.marketplaceProduct.update({
+              where: { id: order.productId },
+              data: { salesCount: { increment: 1 } },
+            }),
+            prisma.marketplaceSeller.update({
+              where: { id: order.sellerId },
+              data: { balanceCents: { increment: order.sellerAmountCents } },
+            }),
+            prisma.marketplaceAnalyticsEvent.create({
+              data: { productId: order.productId, type: "SALE" },
+            }),
+          ]);
+
+          console.log(`[MarketplaceOrder: ${order.id}] payment_status = paid`);
+          break;
+        }
 
         // ZOVO Correction & Validation : paiement unique, jamais un abonnement.
         // Idempotence : un même événement/session Stripe ne doit créer qu'un

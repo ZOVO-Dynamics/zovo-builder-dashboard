@@ -37,10 +37,11 @@ model User {
   creditTransactions CreditTransaction[]
   supportMessages    SupportMessage[]
   connectAccount     ConnectAccount?
-  listings           MarketplaceListing[]     @relation("SellerListings")
-  purchases          MarketplaceTransaction[] @relation("BuyerTransactions")
-  sales              MarketplaceTransaction[] @relation("SellerTransactions")
   repairJobs         RepairJob[]
+
+  sellerProfile      MarketplaceSeller?
+  marketplaceOrders  MarketplaceOrder[]  @relation("MarketplaceBuyerOrders")
+  marketplaceReviews MarketplaceReview[] @relation("MarketplaceBuyerReviews")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -197,11 +198,11 @@ model Project {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  generations Generation[]
-  versions    ProjectVersion[]
-  listing     MarketplaceListing?
-  repairJobs  RepairJob[]
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generations         Generation[]
+  versions            ProjectVersion[]
+  repairJobs          RepairJob[]
+  marketplaceProducts MarketplaceProduct[]
 
   @@index([userId])
 }
@@ -318,55 +319,6 @@ model ConnectAccount {
   updatedAt              DateTime @updatedAt
 }
 
-model MarketplaceListing {
-  id                  String                  @id @default(cuid())
-  projectId           String                  @unique
-  project             Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  sellerId            String
-  seller              User                    @relation("SellerListings", fields: [sellerId], references: [id])
-  askingPriceCents    Int
-  estimatedValueCents Int?
-  description         String?
-  status              ListingStatus           @default(DRAFT)
-  createdAt           DateTime                @default(now())
-  updatedAt           DateTime                @updatedAt
-  transaction         MarketplaceTransaction?
-
-  @@index([sellerId])
-}
-
-enum ListingStatus {
-  DRAFT
-  LISTED
-  SOLD
-  WITHDRAWN
-}
-
-model MarketplaceTransaction {
-  id                    String             @id @default(cuid())
-  listingId             String             @unique
-  listing               MarketplaceListing @relation(fields: [listingId], references: [id])
-  buyerId               String
-  buyer                 User               @relation("BuyerTransactions", fields: [buyerId], references: [id])
-  sellerId              String
-  seller                User               @relation("SellerTransactions", fields: [sellerId], references: [id])
-  amountCents           Int
-  commissionCents       Int
-  stripePaymentIntentId String             @unique
-  status                TransactionStatus  @default(PENDING)
-  createdAt             DateTime           @default(now())
-
-  @@index([buyerId])
-  @@index([sellerId])
-}
-
-enum TransactionStatus {
-  PENDING
-  COMPLETED
-  FAILED
-  REFUNDED
-}
-
 enum RepairJobStatus {
   PENDING_PAYMENT
   PAID
@@ -385,9 +337,6 @@ enum RepairValidationStatus {
   FAILED
 }
 
-// ZOVO Correction & Validation — service payant (29,99$ CAD, paiement unique)
-// qui relance le Validator existant sur un projet déjà généré pour corriger
-// les erreurs restantes et produire un rapport client compréhensible.
 model RepairJob {
   id     String @id @default(cuid())
   userId String
@@ -401,7 +350,7 @@ model RepairJob {
 
   status RepairJobStatus @default(PENDING_PAYMENT)
 
-  price    Int    @default(2999) // en cents
+  price    Int    @default(2999)
   currency String @default("CAD")
 
   attempts         Int                    @default(0)
@@ -422,4 +371,262 @@ model RepairJob {
   @@index([userId])
   @@index([projectId])
   @@index([status])
+}
+
+enum SellerTier {
+  STANDARD
+  PRO
+  ENTERPRISE
+}
+
+enum MarketplaceProductType {
+  PLUGIN
+  TEMPLATE
+  APPLICATION
+  COMPONENT
+  AI_AGENT
+  DEV_TOOL
+  PROJECT
+  SERVICE
+  DIGITAL_RESOURCE
+}
+
+enum MarketplaceProductStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+  ARCHIVED
+}
+
+enum MarketplaceOrderStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum SponsoredPlacementType {
+  HOUR_24
+  DAYS_7
+  DAYS_30
+  FEATURED
+  HOMEPAGE
+}
+
+enum SponsoredPlacementStatus {
+  PENDING_PAYMENT
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum SellerPayoutStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+}
+
+enum MarketplaceAnalyticsEventType {
+  VIEW
+  CLICK
+  SALE
+  SPONSORED_IMPRESSION
+  SPONSORED_CLICK
+}
+
+model MarketplaceCommissionConfig {
+  id        String     @id @default(cuid())
+  tier      SellerTier @unique
+  rate      Float
+  active    Boolean    @default(true)
+  updatedAt DateTime   @updatedAt
+}
+
+model MarketplaceSponsoredPrice {
+  id            String                 @id @default(cuid())
+  placementType SponsoredPlacementType @unique
+  priceCents    Int
+  currency      String                 @default("CAD")
+  active        Boolean                @default(true)
+  updatedAt     DateTime               @updatedAt
+}
+
+model MarketplaceCategory {
+  id        String               @id @default(cuid())
+  name      String               @unique
+  slug      String               @unique
+  createdAt DateTime             @default(now())
+  products  MarketplaceProduct[]
+}
+
+model MarketplaceSeller {
+  id           String     @id @default(cuid())
+  userId       String     @unique
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tier         SellerTier @default(STANDARD)
+  displayName  String?
+  bio          String?    @db.Text
+  suspended    Boolean    @default(false)
+  balanceCents Int        @default(0)
+  ratingAvg    Float      @default(0)
+  ratingCount  Int        @default(0)
+
+  products   MarketplaceProduct[]
+  orders     MarketplaceOrder[]
+  payouts    SellerPayout[]
+  placements SponsoredPlacement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tier])
+}
+
+model MarketplaceProduct {
+  id         String               @id @default(cuid())
+  sellerId   String
+  seller     MarketplaceSeller    @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  categoryId String?
+  category   MarketplaceCategory? @relation(fields: [categoryId], references: [id])
+  projectId  String?
+  project    Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  type        MarketplaceProductType
+  title       String
+  slug        String                   @unique
+  description String                   @db.Text
+  priceCents  Int
+  currency    String                   @default("CAD")
+  status      MarketplaceProductStatus @default(DRAFT)
+
+  version       String?
+  changelog     String? @db.Text
+  techStack     Json?
+  compatibility String?
+  licenseType   String?
+  screenshots   Json?
+
+  salesCount  Int   @default(0)
+  viewCount   Int   @default(0)
+  ratingAvg   Float @default(0)
+  ratingCount Int   @default(0)
+
+  orders     MarketplaceOrder[]
+  reviews    MarketplaceReview[]
+  placements SponsoredPlacement[]
+  events     MarketplaceAnalyticsEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sellerId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([type])
+}
+
+model MarketplaceOrder {
+  id        String             @id @default(cuid())
+  productId String
+  product   MarketplaceProduct @relation(fields: [productId], references: [id])
+  buyerId   String
+  buyer     User               @relation("MarketplaceBuyerOrders", fields: [buyerId], references: [id])
+  sellerId  String
+  seller    MarketplaceSeller  @relation(fields: [sellerId], references: [id])
+
+  priceCents        Int
+  currency          String @default("CAD")
+  commissionRate    Float
+  commissionCents   Int
+  sellerAmountCents Int
+
+  stripeCheckoutSessionId String? @unique
+  stripePaymentIntentId   String? @unique
+
+  status    MarketplaceOrderStatus @default(PENDING)
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+
+  review MarketplaceReview?
+
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([productId])
+  @@index([status])
+}
+
+model MarketplaceReview {
+  id        String             @id @default(cuid())
+  orderId   String             @unique
+  order     MarketplaceOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   MarketplaceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  buyerId   String
+  buyer     User               @relation("MarketplaceBuyerReviews", fields: [buyerId], references: [id])
+  rating    Int
+  comment   String?            @db.Text
+  createdAt DateTime           @default(now())
+
+  @@index([productId])
+}
+
+model SponsoredPlacement {
+  id        String             @id @default(cuid())
+  productId String
+  product   MarketplaceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sellerId  String
+  seller    MarketplaceSeller  @relation(fields: [sellerId], references: [id])
+
+  placementType SponsoredPlacementType
+  priceCents    Int
+  currency      String                 @default("CAD")
+
+  stripeCheckoutSessionId String? @unique
+  stripePaymentIntentId   String? @unique
+
+  status    SponsoredPlacementStatus @default(PENDING_PAYMENT)
+  startsAt  DateTime?
+  endsAt    DateTime?
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
+
+  events MarketplaceAnalyticsEvent[]
+
+  @@index([productId])
+  @@index([status])
+  @@index([endsAt])
+}
+
+model SellerPayout {
+  id       String            @id @default(cuid())
+  sellerId String
+  seller   MarketplaceSeller @relation(fields: [sellerId], references: [id])
+
+  amountCents      Int
+  currency         String             @default("CAD")
+  status           SellerPayoutStatus @default(PENDING)
+  stripeTransferId String?            @unique
+
+  requestedAt DateTime  @default(now())
+  paidAt      DateTime?
+
+  @@index([sellerId])
+  @@index([status])
+}
+
+model MarketplaceAnalyticsEvent {
+  id                   String                        @id @default(cuid())
+  productId            String
+  product              MarketplaceProduct            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sponsoredPlacementId String?
+  sponsoredPlacement   SponsoredPlacement?            @relation(fields: [sponsoredPlacementId], references: [id], onDelete: SetNull)
+  type                 MarketplaceAnalyticsEventType
+  createdAt            DateTime                       @default(now())
+
+  @@index([productId, type])
+  @@index([sponsoredPlacementId])
 }
