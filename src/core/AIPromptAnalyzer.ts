@@ -69,7 +69,7 @@ Demande à analyser : "${prompt}"`;
         language: parsed.language || "typescript",
         features: parsed.features,
         database: parsed.database || "none",
-        authentication: !!parsed.authentication,
+        authentication: parsed.authentication === true || parsed.authentication === "true",
         deployment: parsed.deployment || "cloudflare",
         complexityTier: computeComplexityTier(parsed.features),
       };

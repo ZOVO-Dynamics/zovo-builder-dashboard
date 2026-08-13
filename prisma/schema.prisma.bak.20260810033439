@@ -1,0 +1,425 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Plan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  isAdmin       Boolean   @default(false)
+
+  plan         Plan     @default(FREE)
+  monthlyUsage Int      @default(0)
+  usageResetAt DateTime @default(now())
+
+  accountType AccountType @default(CREATOR)
+
+  accounts           Account[]
+  sessions           Session[]
+  subscription       Subscription?
+  generations        Generation[]
+  projects           Project[]
+  entitlement        UserEntitlement?
+  creditsBalance     Int                      @default(0)
+  creditTransactions CreditTransaction[]
+  supportMessages    SupportMessage[]
+  connectAccount     ConnectAccount?
+  listings           MarketplaceListing[]     @relation("SellerListings")
+  purchases          MarketplaceTransaction[] @relation("BuyerTransactions")
+  sales              MarketplaceTransaction[] @relation("SellerTransactions")
+  repairJobs         RepairJob[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  planId               String?
+  status               String    @default("inactive")
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  stripePriceId        String?
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean   @default(false)
+  discountId           String?
+
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan     SubscriptionPlan? @relation(fields: [planId], references: [id])
+  discount Discount?         @relation(fields: [discountId], references: [id])
+
+  usageLimits UsageLimit[]
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  generations Generation[]
+
+  @@index([status])
+}
+
+enum PlanTier {
+  WEEKLY_PRO
+  MONTHLY_PRO
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+  TRIALING
+}
+
+model SubscriptionPlan {
+  id               String   @id @default(cuid())
+  name             String   @unique
+  internalName     String   @unique
+  tier             PlanTier
+  currency         String   @default("CAD")
+  generationsLimit Int
+  stripeProductId  String?
+  features         Json
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  subscriptions Subscription[]
+  prices        PlanPrice[]
+}
+
+model UsageLimit {
+  id              String   @id @default(cuid())
+  subscriptionId  String
+  periodStart     DateTime
+  periodEnd       DateTime
+  generationsUsed Int      @default(0)
+  generationsCap  Int
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([subscriptionId, periodStart])
+}
+
+model Generation {
+  id             String   @id @default(cuid())
+  userId         String
+  subscriptionId String?
+  projectId      String?
+  prompt         String   @db.Text
+  status         String   @default("completed")
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([projectId])
+}
+
+model GenerationJob {
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String?
+  prompt    String   @db.Text
+  status    String   @default("pending")
+  result    Json?
+  error     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Project {
+  id             String   @id @default(cuid())
+  userId         String
+  name           String
+  projectPath    String   @unique
+  currentVersion Int      @default(1)
+  preferences    Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generations Generation[]
+  versions    ProjectVersion[]
+  listing     MarketplaceListing?
+  repairJobs  RepairJob[]
+
+  @@index([userId])
+}
+
+model ProjectVersion {
+  id            String   @id @default(cuid())
+  projectId     String
+  versionNumber Int
+  prompt        String   @db.Text
+  blueprint     Json?
+  createdAt     DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, versionNumber])
+  @@index([projectId])
+}
+
+model Discount {
+  id             String   @id @default(cuid())
+  code           String   @unique
+  percentOff     Int
+  appliesToTier  PlanTier
+  validFrom      DateTime
+  validUntil     DateTime
+  stripeCouponId String?
+  createdAt      DateTime @default(now())
+
+  subscriptions Subscription[]
+
+  @@index([validFrom, validUntil])
+}
+
+model UserEntitlement {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  features  Json
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum CreditTransactionType {
+  PURCHASE
+  CONSUMPTION
+  REFUND
+}
+
+model CreditPack {
+  id            String  @id @default(cuid())
+  name          String  @unique
+  priceCents    Int
+  currency      String  @default("CAD")
+  credits       Int
+  stripePriceId String?
+  active        Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CreditTransaction {
+  id                    String                @id @default(cuid())
+  userId                String
+  type                  CreditTransactionType
+  amount                Int
+  balanceAfter          Int
+  stripePaymentIntentId String?               @unique
+  generationId          String?
+  createdAt             DateTime              @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PlanPrice {
+  id              String           @id @default(uuid())
+  planId          String
+  plan            SubscriptionPlan @relation(fields: [planId], references: [id])
+  billingInterval String
+  priceCents      Int
+  stripePriceId   String           @unique
+  isDefault       Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+}
+
+model SupportMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  role      String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+enum AccountType {
+  CREATOR
+  AGENCY
+}
+
+model ConnectAccount {
+  id                     String   @id @default(cuid())
+  userId                 String   @unique
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeConnectAccountId String   @unique
+  onboardingComplete     Boolean  @default(false)
+  payoutsEnabled         Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model MarketplaceListing {
+  id                  String                  @id @default(cuid())
+  projectId           String                  @unique
+  project             Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sellerId            String
+  seller              User                    @relation("SellerListings", fields: [sellerId], references: [id])
+  askingPriceCents    Int
+  estimatedValueCents Int?
+  description         String?
+  status              ListingStatus           @default(DRAFT)
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  transaction         MarketplaceTransaction?
+
+  @@index([sellerId])
+}
+
+enum ListingStatus {
+  DRAFT
+  LISTED
+  SOLD
+  WITHDRAWN
+}
+
+model MarketplaceTransaction {
+  id                    String             @id @default(cuid())
+  listingId             String             @unique
+  listing               MarketplaceListing @relation(fields: [listingId], references: [id])
+  buyerId               String
+  buyer                 User               @relation("BuyerTransactions", fields: [buyerId], references: [id])
+  sellerId              String
+  seller                User               @relation("SellerTransactions", fields: [sellerId], references: [id])
+  amountCents           Int
+  commissionCents       Int
+  stripePaymentIntentId String             @unique
+  status                TransactionStatus  @default(PENDING)
+  createdAt             DateTime           @default(now())
+
+  @@index([buyerId])
+  @@index([sellerId])
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum RepairJobStatus {
+  PENDING_PAYMENT
+  PAID
+  QUEUED
+  ANALYZING
+  FIXING
+  VALIDATING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum RepairValidationStatus {
+  PENDING
+  OK
+  FAILED
+}
+
+// ZOVO Correction & Validation — service payant (29,99$ CAD, paiement unique)
+// qui relance le Validator existant sur un projet déjà généré pour corriger
+// les erreurs restantes et produire un rapport client compréhensible.
+model RepairJob {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  stripeCheckoutSessionId String? @unique
+  stripePaymentIntentId   String? @unique
+
+  status RepairJobStatus @default(PENDING_PAYMENT)
+
+  price    Int    @default(2999) // en cents
+  currency String @default("CAD")
+
+  attempts         Int                    @default(0)
+  errorsDetected   Int?
+  errorsFixed      Int?
+  validationStatus RepairValidationStatus @default(PENDING)
+
+  fixedFilesSummary Json?
+  remainingErrors   Json?
+  failureReason     String? @db.Text
+
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([status])
+}

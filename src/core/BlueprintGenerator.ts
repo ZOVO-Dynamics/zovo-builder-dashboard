@@ -136,7 +136,7 @@ export class BlueprintGenerator {
       files.add(`src/components/${component}.tsx`);
     }
 
-    const nameSource = input.projectType || "app";
+    const nameSource = input.projectName?.trim() || input.projectType || "app";
     const name = `zovo-${nameSource.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
 
     const { files: filesWithPages } = ensureRoutePageFiles(

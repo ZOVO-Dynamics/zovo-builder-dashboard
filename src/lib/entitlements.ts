@@ -21,7 +21,11 @@ function getCurrentPeriod(billingInterval: string, referenceStart: Date): { star
   if (billingInterval === "week") {
     end.setDate(end.getDate() + 7);
   } else {
+    const expectedMonth = (start.getMonth() + 1) % 12;
     end.setMonth(end.getMonth() + 1);
+    if (end.getMonth() !== expectedMonth) {
+      end.setDate(0);
+    }
   }
 
   return { start, end };

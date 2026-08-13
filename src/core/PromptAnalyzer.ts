@@ -40,6 +40,17 @@ export class PromptAnalyzer {
       features.push("api");
     }
 
+    let projectType = "web-app";
+    if (text.includes("e-commerce") || text.includes("ecommerce") || text.includes("boutique") || text.includes("shop")) {
+      projectType = "e-commerce";
+    } else if (text.includes("blog")) {
+      projectType = "blog";
+    } else if (text.includes("dashboard") || text.includes("tableau de bord")) {
+      projectType = "dashboard";
+    } else if (text.includes("api-only") || text.includes("api pure") || text.includes("backend")) {
+      projectType = "api-only";
+    }
+
     const slugName = prompt
       .toLowerCase()
       .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -50,7 +61,7 @@ export class PromptAnalyzer {
       .join("-") || "projet";
 
     return {
-      projectType: "web-app",
+      projectType,
       projectName: slugName,
       framework: "nextjs",
       language: "typescript",
