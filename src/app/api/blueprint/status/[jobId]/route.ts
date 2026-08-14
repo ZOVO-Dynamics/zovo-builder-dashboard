@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getJobEventsSince, getJobEventCount } from "@/core/JobEventLog";
 
 export async function GET(
   req: NextRequest,
@@ -25,10 +26,16 @@ export async function GET(
       ? (job.result as { progress?: { current: number; total: number } }).progress ?? null
       : null;
 
+  const since = parseInt(req.nextUrl.searchParams.get("since") ?? "0", 10) || 0;
+  const events = getJobEventsSince(jobId, since);
+  const eventCursor = getJobEventCount(jobId);
+
   return NextResponse.json({
     status: job.status,
     result: job.status === "completed" ? job.result : null,
     progress,
     error: job.status === "failed" ? job.error : null,
+    events,
+    eventCursor,
   });
 }

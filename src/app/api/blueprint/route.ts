@@ -9,6 +9,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkGenerationEntitlement, recordGeneration } from "@/lib/entitlements";
 import { rateLimit } from "@/lib/rate-limit";
+import { pushJobEvent } from "@/core/JobEventLog";
 
 async function runGenerationJob(
   jobId: string,
@@ -16,6 +17,7 @@ async function runGenerationJob(
   prompt: string,
   projectId: string | null
 ) {
+  pushJobEvent(jobId, "THINKING_START");
   try {
     let existingProject = null;
     if (projectId) {
@@ -48,11 +50,13 @@ async function runGenerationJob(
     } else {
       projectBlueprint = await aiPromptAnalyzer.analyze(effectivePrompt);
       buildBlueprint = blueprintGenerator.generate(projectBlueprint);
+      pushJobEvent(jobId, "WRITING_START");
       const writeResult = await projectWriter.write(
         buildBlueprint,
         projectBlueprint,
         prompt,
-        async (current, total) => {
+        async (current, total, file) => {
+          pushJobEvent(jobId, "FILE_PROJECTED", { file, action: "create" });
           await prisma.generationJob.update({
             where: { id: jobId },
             data: { result: { progress: { current, total } } as never },
@@ -134,6 +138,7 @@ async function runGenerationJob(
       data: { projectId: project.id },
     });
 
+    pushJobEvent(jobId, "INTEGRATION_COMPLETE");
     await prisma.generationJob.update({
       where: { id: jobId },
       data: {

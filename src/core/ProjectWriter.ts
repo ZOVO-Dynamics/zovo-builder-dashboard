@@ -386,7 +386,7 @@ export class ProjectWriter {
     blueprint: BuildBlueprint,
     projectBlueprint?: ProjectBlueprint,
     originalPrompt?: string,
-    onProgress?: (current: number, total: number) => Promise<void> | void
+    onProgress?: (current: number, total: number, file?: string) => Promise<void> | void
   ): Promise<{ projectPath: string; filesCreated: string[]; fallbackFiles: string[] }> {
     const timestamp = Date.now();
     const projectDir = path.join(GENERATED_ROOT, `${blueprint.name}-${timestamp}`);
@@ -420,7 +420,7 @@ export class ProjectWriter {
       filesCreated.push(file);
 
       if (onProgress) {
-        await onProgress(filesCreated.length, blueprint.files.length);
+        await onProgress(filesCreated.length, blueprint.files.length, file);
       }
     }
 
