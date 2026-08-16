@@ -378,7 +378,10 @@ export async function POST(req: NextRequest) {
           if (offerId) {
             const offer = await prisma.agencyOffer.findUnique({
               where: { id: offerId },
-              include: { project: { select: { userId: true } } },
+              include: {
+                project: { select: { userId: true } },
+                agencySeller: { select: { userId: true } },
+              },
             });
 
             // Idempotent : ne credite jamais deux fois si le webhook rejoue l'evenement.
@@ -397,10 +400,10 @@ export async function POST(req: NextRequest) {
                 });
 
                 await tx.marketplaceSeller.upsert({
-                  where: { userId: offer.project.userId },
+                  where: { userId: offer.agencySeller.userId },
                   update: { balanceCents: { increment: sellerAmountCents } },
                   create: {
-                    userId: offer.project.userId,
+                    userId: offer.agencySeller.userId,
                     balanceCents: sellerAmountCents,
                   },
                 });
