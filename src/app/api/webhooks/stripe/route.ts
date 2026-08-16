@@ -354,6 +354,64 @@ export async function POST(req: NextRequest) {
         break;
       }
 
+      case "setup_intent.succeeded": {
+        const setupIntent = event.data.object as Stripe.SetupIntent;
+        const customerId = setupIntent.customer as string | null;
+        const paymentMethodId = setupIntent.payment_method as string | null;
+
+        if (customerId && paymentMethodId) {
+          await prisma.marketplaceSeller.updateMany({
+            where: { stripeCustomerId: customerId },
+            data: { defaultPaymentMethodId: paymentMethodId },
+          });
+        }
+
+        break;
+      }
+
+      case "payment_intent.succeeded": {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+
+        if (paymentIntent.metadata?.kind === "agency_offer") {
+          console.log("[webhook] agency_offer PI received", paymentIntent.id, paymentIntent.metadata);
+          const offerId = paymentIntent.metadata.offerId;
+          if (offerId) {
+            const offer = await prisma.agencyOffer.findUnique({
+              where: { id: offerId },
+              include: { project: { select: { userId: true } } },
+            });
+
+            // Idempotent : ne credite jamais deux fois si le webhook rejoue l'evenement.
+            console.log("[webhook] offer lookup result", offer ? offer.id : null, offer ? offer.status : null);
+            if (offer && offer.status !== "PAID") {
+              const sellerAmountCents = offer.priceCents - offer.commissionCents;
+
+              await prisma.$transaction(async (tx) => {
+                await tx.agencyOffer.update({
+                  where: { id: offer.id },
+                  data: {
+                    status: "PAID",
+                    stripePaymentIntentId: paymentIntent.id,
+                    paidAt: new Date(),
+                  },
+                });
+
+                await tx.marketplaceSeller.upsert({
+                  where: { userId: offer.project.userId },
+                  update: { balanceCents: { increment: sellerAmountCents } },
+                  create: {
+                    userId: offer.project.userId,
+                    balanceCents: sellerAmountCents,
+                  },
+                });
+              });
+            }
+          }
+        }
+
+        break;
+      }
+
       default:
         break;
     }
