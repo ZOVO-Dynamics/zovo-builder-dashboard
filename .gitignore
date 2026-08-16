@@ -45,3 +45,13 @@ next-env.d.ts
 /src/generated/prisma
 cookies.txt
 .zovo-ai/
+
+# Fichiers de sauvegarde générés pendant les sessions de dev
+*.bak
+*.bak.*
+*.bak-*
+
+# Fichiers de sauvegarde générés pendant les sessions de dev
+*.bak
+*.bak.*
+*.bak-*
