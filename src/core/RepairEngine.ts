@@ -17,8 +17,8 @@ function shouldSkip(relPath: string): boolean {
 // Copie récursive en excluant node_modules/.next (évite de gonfler inutilement
 // la sauvegarde et respecte le principe "snapshot avant modification").
 function copyProjectDir(fromDir: string, toDir: string) {
-  fs.mkdirSync(toDir, { recursive: true });
-  for (const entry of fs.readdirSync(fromDir, { withFileTypes: true })) {
+  fs.mkdirSync(/*turbopackIgnore: true*/ toDir, { recursive: true });
+  for (const entry of fs.readdirSync(/*turbopackIgnore: true*/ fromDir, { withFileTypes: true })) {
     if (shouldSkip(entry.name)) continue;
     const src = path.join(fromDir, entry.name);
     const dest = path.join(toDir, entry.name);
@@ -32,27 +32,27 @@ function copyProjectDir(fromDir: string, toDir: string) {
 
 function snapshotDir(projectDir: string, jobId: string): string {
   const backupDir = `${projectDir}.repair-backup-${jobId}`;
-  if (fs.existsSync(backupDir)) fs.rmSync(backupDir, { recursive: true, force: true });
+  if (fs.existsSync(/*turbopackIgnore: true*/ backupDir)) fs.rmSync(/*turbopackIgnore: true*/ backupDir, { recursive: true, force: true });
   copyProjectDir(projectDir, backupDir);
   return backupDir;
 }
 
 function archiveFailedState(projectDir: string, jobId: string): string {
   const failedDir = `${projectDir}.repair-failed-${jobId}`;
-  if (fs.existsSync(failedDir)) fs.rmSync(failedDir, { recursive: true, force: true });
+  if (fs.existsSync(/*turbopackIgnore: true*/ failedDir)) fs.rmSync(/*turbopackIgnore: true*/ failedDir, { recursive: true, force: true });
   copyProjectDir(projectDir, failedDir);
   return failedDir;
 }
 
 function restoreFromSnapshot(projectDir: string, backupDir: string) {
-  fs.rmSync(projectDir, { recursive: true, force: true });
+  fs.rmSync(/*turbopackIgnore: true*/ projectDir, { recursive: true, force: true });
   copyProjectDir(backupDir, projectDir);
 }
 
 function safeRemove(dir: string | null) {
   if (!dir) return;
   try {
-    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+    if (fs.existsSync(/*turbopackIgnore: true*/ dir)) fs.rmSync(/*turbopackIgnore: true*/ dir, { recursive: true, force: true });
   } catch {
     // best-effort, ne doit jamais faire échouer le job
   }
@@ -121,7 +121,7 @@ export async function runRepairJob(jobId: string): Promise<RepairRunResult> {
 
   const projectDir = job.project.projectPath;
 
-  if (!fs.existsSync(projectDir) || !fs.statSync(projectDir).isDirectory()) {
+  if (!fs.existsSync(/*turbopackIgnore: true*/ projectDir) || !fs.statSync(/*turbopackIgnore: true*/ projectDir).isDirectory()) {
     await prisma.repairJob.update({
       where: { id: jobId },
       data: {

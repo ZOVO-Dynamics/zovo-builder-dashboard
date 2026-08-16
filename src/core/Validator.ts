@@ -48,16 +48,16 @@ function installDependencies(projectDir: string): boolean {
 function fixCommonHallucinations(projectDir: string): string[] {
   const fixedFiles: string[] = [];
   const srcDir = path.join(projectDir, "src");
-  if (!fs.existsSync(srcDir)) return fixedFiles;
+  if (!fs.existsSync(/*turbopackIgnore: true*/ srcDir)) return fixedFiles;
 
   function walk(dir: string) {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    for (const entry of fs.readdirSync(/*turbopackIgnore: true*/ dir, { withFileTypes: true })) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         if (entry.name === "node_modules" || entry.name === ".next") continue;
         walk(fullPath);
       } else if (/\.(tsx|ts|jsx|js)$/.test(entry.name)) {
-        let content = fs.readFileSync(fullPath, "utf-8");
+        let content = fs.readFileSync(/*turbopackIgnore: true*/ fullPath, "utf-8");
         let changed = false;
 
         if (/from\s+["']next\/router["']/.test(content)) {
@@ -76,7 +76,7 @@ function fixCommonHallucinations(projectDir: string): string[] {
         }
 
         if (changed) {
-          fs.writeFileSync(fullPath, content, "utf-8");
+          fs.writeFileSync(/*turbopackIgnore: true*/ fullPath, content, "utf-8");
           fixedFiles.push(path.relative(projectDir, fullPath));
         }
       }
@@ -93,16 +93,16 @@ const JSX_RETURN_PATTERN = /return\s*\(\s*<[A-Za-z]|return\s+<[A-Za-z]/;
 function fixTsFilesContainingJsx(projectDir: string): string[] {
   const fixedFiles: string[] = [];
   const srcDir = path.join(projectDir, "src");
-  if (!fs.existsSync(srcDir)) return fixedFiles;
+  if (!fs.existsSync(/*turbopackIgnore: true*/ srcDir)) return fixedFiles;
 
   function walk(dir: string) {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    for (const entry of fs.readdirSync(/*turbopackIgnore: true*/ dir, { withFileTypes: true })) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         if (entry.name === "node_modules" || entry.name === ".next") continue;
         walk(fullPath);
       } else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".d.ts")) {
-        const content = fs.readFileSync(fullPath, "utf-8");
+        const content = fs.readFileSync(/*turbopackIgnore: true*/ fullPath, "utf-8");
         if (JSX_RETURN_PATTERN.test(content)) {
           const newPath = fullPath.slice(0, -3) + ".tsx";
           fs.renameSync(fullPath, newPath);
@@ -158,9 +158,9 @@ function stripHallucinatedGeneratorWrapper(content: string): string | null {
 function fixMalformedPrismaSchema(projectDir: string): string[] {
   const fixedFiles: string[] = [];
   const schemaPath = path.join(projectDir, "prisma", "schema.prisma");
-  if (!fs.existsSync(schemaPath)) return fixedFiles;
+  if (!fs.existsSync(/*turbopackIgnore: true*/ schemaPath)) return fixedFiles;
 
-  let content = fs.readFileSync(schemaPath, "utf-8");
+  let content = fs.readFileSync(/*turbopackIgnore: true*/ schemaPath, "utf-8");
   let changed = false;
 
   // Cas 1 : ligne "generator "xxx"" orpheline isolée (variante connue depuis début août).
@@ -180,7 +180,7 @@ function fixMalformedPrismaSchema(projectDir: string): string[] {
   }
 
   if (changed) {
-    fs.writeFileSync(schemaPath, content, "utf-8");
+    fs.writeFileSync(/*turbopackIgnore: true*/ schemaPath, content, "utf-8");
     fixedFiles.push(path.relative(projectDir, schemaPath));
   }
 
@@ -208,7 +208,7 @@ function resolveLocalImport(projectDir: string, fromFile: string, importPath: st
   ];
 
   for (const candidate of candidates) {
-    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+    if (fs.existsSync(/*turbopackIgnore: true*/ candidate) && fs.statSync(/*turbopackIgnore: true*/ candidate).isFile()) {
       return candidate;
     }
   }
@@ -235,9 +235,9 @@ function findInventedLocalImports(projectDir: string, filePath: string, content:
 
 function readPackageDependencies(projectDir: string): string[] {
   const pkgPath = path.join(projectDir, "package.json");
-  if (!fs.existsSync(pkgPath)) return [];
+  if (!fs.existsSync(/*turbopackIgnore: true*/ pkgPath)) return [];
   try {
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+    const pkg = JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ pkgPath, "utf-8"));
     return Object.keys({ ...pkg.dependencies, ...pkg.devDependencies });
   } catch {
     return [];
@@ -245,8 +245,8 @@ function readPackageDependencies(projectDir: string): string[] {
 }
 
 function getRelatedFilesContext(projectDir: string, filePath: string): string {
-  if (!fs.existsSync(filePath)) return "";
-  const content = fs.readFileSync(filePath, "utf-8");
+  if (!fs.existsSync(/*turbopackIgnore: true*/ filePath)) return "";
+  const content = fs.readFileSync(/*turbopackIgnore: true*/ filePath, "utf-8");
   const importMatches = content.matchAll(/from\s+["']([^"']+)["']/g);
   const seen = new Set<string>();
   const sections: string[] = [];
@@ -256,14 +256,14 @@ function getRelatedFilesContext(projectDir: string, filePath: string): string {
     const resolved = resolveLocalImport(projectDir, filePath, importPath);
     if (resolved && !seen.has(resolved) && resolved !== filePath) {
       seen.add(resolved);
-      const relatedContent = fs.readFileSync(resolved, "utf-8").slice(0, 1500);
+      const relatedContent = fs.readFileSync(/*turbopackIgnore: true*/ resolved, "utf-8").slice(0, 1500);
       sections.push(`--- ${path.relative(projectDir, resolved)} ---\n${relatedContent}`);
     }
   }
 
   const schemaPath = path.join(projectDir, "prisma", "schema.prisma");
-  if (fs.existsSync(schemaPath) && !seen.has(schemaPath)) {
-    sections.push(`--- prisma/schema.prisma ---\n${fs.readFileSync(schemaPath, "utf-8").slice(0, 2000)}`);
+  if (fs.existsSync(/*turbopackIgnore: true*/ schemaPath) && !seen.has(schemaPath)) {
+    sections.push(`--- prisma/schema.prisma ---\n${fs.readFileSync(/*turbopackIgnore: true*/ schemaPath, "utf-8").slice(0, 2000)}`);
   }
 
   const deps = readPackageDependencies(projectDir);
@@ -310,7 +310,7 @@ Erreurs détectées :
 ${errorSummary}
 
 Contenu actuel du fichier :
-${fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf-8") : "(fichier vide)"}
+${fs.existsSync(/*turbopackIgnore: true*/ filePath) ? fs.readFileSync(/*turbopackIgnore: true*/ filePath, "utf-8") : "(fichier vide)"}
 ${relatedContext}
 
 Règles strictes :
@@ -343,7 +343,7 @@ Corrige à nouveau en éliminant ces imports : soit tu inlines directement le co
     }
   }
 
-  fs.writeFileSync(filePath, content + "\n", "utf-8");
+  fs.writeFileSync(/*turbopackIgnore: true*/ filePath, content + "\n", "utf-8");
   return true;
 }
 
@@ -351,20 +351,20 @@ Corrige à nouveau en éliminant ces imports : soit tu inlines directement le co
 function routeExistsForSegments(projectDir: string, segments: string[]): boolean {
   let currentDir = path.join(projectDir, "src", "app", "api");
   for (const segment of segments) {
-    if (!fs.existsSync(currentDir)) return false;
+    if (!fs.existsSync(/*turbopackIgnore: true*/ currentDir)) return false;
     const isDynamic = /^\$\{[^}]+\}$/.test(segment);
     if (isDynamic) {
-      const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+      const entries = fs.readdirSync(/*turbopackIgnore: true*/ currentDir, { withFileTypes: true });
       const paramDir = entries.find((e) => e.isDirectory() && /^\[.+\]$/.test(e.name));
       if (!paramDir) return false;
       currentDir = path.join(currentDir, paramDir.name);
     } else {
       const literalDir = path.join(currentDir, segment);
-      if (!fs.existsSync(literalDir)) return false;
+      if (!fs.existsSync(/*turbopackIgnore: true*/ literalDir)) return false;
       currentDir = literalDir;
     }
   }
-  return fs.existsSync(path.join(currentDir, "route.ts"));
+  return fs.existsSync(/*turbopackIgnore: true*/ path.join(currentDir, "route.ts"));
 }
 
 function toRouteSegment(segment: string): string {
@@ -396,11 +396,11 @@ export async function generateMissingApiRoute(
   const segments = apiPath.replace(/^\/api\//, "").split("/").filter(Boolean).map(toRouteSegment);
   const routeDir = path.join(projectDir, "src", "app", "api", ...segments);
   const routeFile = path.join(routeDir, "route.ts");
-  if (fs.existsSync(routeFile)) return false;
+  if (fs.existsSync(/*turbopackIgnore: true*/ routeFile)) return false;
 
   const schemaPath = path.join(projectDir, "prisma", "schema.prisma");
-  const schemaContext = fs.existsSync(schemaPath)
-    ? `\n\nSchéma Prisma réel du projet (n'invente aucun champ absent d'ici) :\n${fs.readFileSync(schemaPath, "utf-8").slice(0, 2000)}`
+  const schemaContext = fs.existsSync(/*turbopackIgnore: true*/ schemaPath)
+    ? `\n\nSchéma Prisma réel du projet (n'invente aucun champ absent d'ici) :\n${fs.readFileSync(/*turbopackIgnore: true*/ schemaPath, "utf-8").slice(0, 2000)}`
     : "";
   const deps = readPackageDependencies(projectDir);
   const depsContext = deps.length > 0 ? `\n\nDépendances npm installées : ${deps.join(", ")}` : "";
@@ -424,8 +424,8 @@ Règles strictes :
   const content = await callAiBridge(prompt);
   if (!content) return false;
 
-  fs.mkdirSync(routeDir, { recursive: true });
-  fs.writeFileSync(routeFile, content + "\n", "utf-8");
+  fs.mkdirSync(/*turbopackIgnore: true*/ routeDir, { recursive: true });
+  fs.writeFileSync(/*turbopackIgnore: true*/ routeFile, content + "\n", "utf-8");
   return true;
 }
 
@@ -441,8 +441,8 @@ function extractCallerContext(content: string, apiPath: string): string {
 function fixMissingDatasource(projectDir: string): string[] {
   const fixed: string[] = [];
   const schemaPath = path.join(projectDir, "prisma", "schema.prisma");
-  if (!fs.existsSync(schemaPath)) return fixed;
-  let content = fs.readFileSync(schemaPath, "utf-8");
+  if (!fs.existsSync(/*turbopackIgnore: true*/ schemaPath)) return fixed;
+  let content = fs.readFileSync(/*turbopackIgnore: true*/ schemaPath, "utf-8");
 
   const generatorBlocks = content.match(/generator\s+\w+\s*{[^}]*}/g) || [];
   const datasourceBlocks = content.match(/datasource\s+\w+\s*{[^}]*}/g) || [];
@@ -468,7 +468,7 @@ function fixMissingDatasource(projectDir: string): string[] {
 
   if (changed) {
     content = content.replace(/\n{3,}/g, "\n\n");
-    fs.writeFileSync(schemaPath, content, "utf-8");
+    fs.writeFileSync(/*turbopackIgnore: true*/ schemaPath, content, "utf-8");
     fixed.push("prisma/schema.prisma");
   }
   return fixed;
@@ -477,8 +477,8 @@ function fixMissingDatasource(projectDir: string): string[] {
 function fixMismatchedPrismaModelNames(projectDir: string): string[] {
   const fixed: string[] = [];
   const schemaPath = path.join(projectDir, "prisma", "schema.prisma");
-  if (!fs.existsSync(schemaPath)) return fixed;
-  const schemaContent = fs.readFileSync(schemaPath, "utf-8");
+  if (!fs.existsSync(/*turbopackIgnore: true*/ schemaPath)) return fixed;
+  const schemaContent = fs.readFileSync(/*turbopackIgnore: true*/ schemaPath, "utf-8");
 
   const modelNames = new Set<string>();
   const modelRegex = /model\s+(\w+)\s*{/g;
@@ -490,16 +490,16 @@ function fixMismatchedPrismaModelNames(projectDir: string): string[] {
   for (const name of modelNames) lowerToReal.set(name.charAt(0).toLowerCase() + name.slice(1), name);
 
   const srcDir = path.join(projectDir, "src");
-  if (!fs.existsSync(srcDir)) return fixed;
+  if (!fs.existsSync(/*turbopackIgnore: true*/ srcDir)) return fixed;
 
   function walk(dir: string) {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    for (const entry of fs.readdirSync(/*turbopackIgnore: true*/ dir, { withFileTypes: true })) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         if (entry.name === "node_modules" || entry.name === ".next") continue;
         walk(fullPath);
       } else if (/\.(ts|tsx)$/.test(entry.name)) {
-        let content = fs.readFileSync(fullPath, "utf-8");
+        let content = fs.readFileSync(/*turbopackIgnore: true*/ fullPath, "utf-8");
         let changed = false;
         content = content.replace(/prisma\.(\w+)\./g, (match, accessor) => {
           if (lowerToReal.has(accessor)) return match;
@@ -512,7 +512,7 @@ function fixMismatchedPrismaModelNames(projectDir: string): string[] {
           return match;
         });
         if (changed) {
-          fs.writeFileSync(fullPath, content, "utf-8");
+          fs.writeFileSync(/*turbopackIgnore: true*/ fullPath, content, "utf-8");
           fixed.push(path.relative(projectDir, fullPath));
         }
       }
@@ -525,11 +525,11 @@ function fixMismatchedPrismaModelNames(projectDir: string): string[] {
 export function fixInconsistentComponentProps(projectDir: string): string[] {
   const fixed: string[] = [];
   const srcDir = path.join(projectDir, "src");
-  if (!fs.existsSync(srcDir)) return fixed;
+  if (!fs.existsSync(/*turbopackIgnore: true*/ srcDir)) return fixed;
 
   const componentFiles: string[] = [];
   function walk(dir: string) {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    for (const entry of fs.readdirSync(/*turbopackIgnore: true*/ dir, { withFileTypes: true })) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         if (entry.name === "node_modules" || entry.name === ".next") continue;
@@ -551,7 +551,7 @@ export function fixInconsistentComponentProps(projectDir: string): string[] {
   const acceptsProps = new Map<string, boolean>();
 
   for (const filePath of componentFiles) {
-    const src = fs.readFileSync(filePath, "utf-8");
+    const src = fs.readFileSync(/*turbopackIgnore: true*/ filePath, "utf-8");
     const baseName = path.basename(filePath, path.extname(filePath));
     const sourceFile = ts.createSourceFile(filePath, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 
@@ -597,7 +597,7 @@ export function fixInconsistentComponentProps(projectDir: string): string[] {
   }
 
   for (const filePath of componentFiles) {
-    const src = fs.readFileSync(filePath, "utf-8");
+    const src = fs.readFileSync(/*turbopackIgnore: true*/ filePath, "utf-8");
     const sourceFile = ts.createSourceFile(filePath, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 
     const edits: { start: number; end: number; text: string }[] = [];
@@ -628,7 +628,7 @@ export function fixInconsistentComponentProps(projectDir: string): string[] {
       for (const e of edits) {
         content = content.slice(0, e.start) + e.text + content.slice(e.end);
       }
-      fs.writeFileSync(filePath, content, "utf-8");
+      fs.writeFileSync(/*turbopackIgnore: true*/ filePath, content, "utf-8");
       fixed.push(path.relative(projectDir, filePath));
     }
   }
@@ -679,10 +679,10 @@ export class Validator {
     fixedFiles.push(...modelNameFixes);
 
     const srcDirForApi = path.join(projectDir, "src");
-    if (fs.existsSync(srcDirForApi)) {
+    if (fs.existsSync(/*turbopackIgnore: true*/ srcDirForApi)) {
       const apiScanFiles: string[] = [];
       function walkForApi(dir: string) {
-        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        for (const entry of fs.readdirSync(/*turbopackIgnore: true*/ dir, { withFileTypes: true })) {
           const fullPath = path.join(dir, entry.name);
           if (entry.isDirectory()) {
             if (entry.name === "node_modules" || entry.name === ".next") continue;
@@ -696,7 +696,7 @@ export class Validator {
 
       const seenRoutes = new Set<string>();
       for (const filePath of apiScanFiles) {
-        const fileContent = fs.readFileSync(filePath, "utf-8");
+        const fileContent = fs.readFileSync(/*turbopackIgnore: true*/ filePath, "utf-8");
         const inventedRoutes = findInventedApiRoutes(projectDir, fileContent);
         for (const apiPath of inventedRoutes) {
           if (seenRoutes.has(apiPath)) continue;
@@ -715,8 +715,8 @@ export class Validator {
     let blueprintForRoutes: any = {};
     try {
       const bpPath = path.join(projectDir, ".zovo-blueprint.json");
-      if (fs.existsSync(bpPath)) {
-        blueprintForRoutes = JSON.parse(fs.readFileSync(bpPath, "utf-8"));
+      if (fs.existsSync(/*turbopackIgnore: true*/ bpPath)) {
+        blueprintForRoutes = JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ bpPath, "utf-8"));
       }
     } catch {}
     const fixedRoutes = fixMissingRoutePages(projectDir, blueprintForRoutes);
@@ -829,7 +829,7 @@ export function fixMissingRoutePages(
 
   for (const route of routes) {
     const pagePath = path.join(projectPath, "src/app", route.slice(1), "page.tsx");
-    if (fs.existsSync(pagePath)) continue;
+    if (fs.existsSync(/*turbopackIgnore: true*/ pagePath)) continue;
 
     const wantedComponents = ROUTE_COMPONENT_MAP[route] || [];
     const availableComponents = wantedComponents.filter((c) =>
@@ -854,8 +854,8 @@ ${jsx}
 }
 `;
 
-    fs.mkdirSync(path.dirname(pagePath), { recursive: true });
-    fs.writeFileSync(pagePath, content, "utf-8");
+    fs.mkdirSync(/*turbopackIgnore: true*/ path.dirname(pagePath), { recursive: true });
+    fs.writeFileSync(/*turbopackIgnore: true*/ pagePath, content, "utf-8");
     created.push(route);
   }
 
@@ -879,9 +879,9 @@ export function detectMismatchedPageContent(
   for (const route of routes) {
     const routeSegment = route === "/" ? "" : route.slice(1);
     const pagePath = path.join(projectDir, "src/app", routeSegment, "page.tsx");
-    if (!fs.existsSync(pagePath)) continue;
+    if (!fs.existsSync(/*turbopackIgnore: true*/ pagePath)) continue;
 
-    const content = fs.readFileSync(pagePath, "utf-8");
+    const content = fs.readFileSync(/*turbopackIgnore: true*/ pagePath, "utf-8");
     const forbidden = ROUTE_FORBIDDEN_KEYWORDS[route] || [];
 
     for (const keyword of forbidden) {
@@ -924,9 +924,9 @@ export function detectHallucinatedPageContent(
     if (route === "/") continue;
     const routeSegment = route.slice(1);
     const pagePath = path.join(projectDir, "src/app", routeSegment, "page.tsx");
-    if (!fs.existsSync(pagePath)) continue;
+    if (!fs.existsSync(/*turbopackIgnore: true*/ pagePath)) continue;
 
-    const content = fs.readFileSync(pagePath, "utf-8");
+    const content = fs.readFileSync(/*turbopackIgnore: true*/ pagePath, "utf-8");
     const reasons: string[] = [];
 
     // Couche 1 : vérification structurelle des imports vs blueprint
@@ -1023,7 +1023,7 @@ export async function detectHallucinationWithAiFallback(
 
     const routeSegment = hit.route.slice(1);
     const pagePath = path.join(projectDir, "src/app", routeSegment, "page.tsx");
-    const content = fs.readFileSync(pagePath, "utf-8");
+    const content = fs.readFileSync(/*turbopackIgnore: true*/ pagePath, "utf-8");
 
     const aiResult = await aiReviewSuspiciousPage(hit.route, content, aiBridgeUrl);
     if (aiResult.isHallucinated) {
