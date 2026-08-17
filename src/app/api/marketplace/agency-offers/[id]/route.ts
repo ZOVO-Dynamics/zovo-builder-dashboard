@@ -12,6 +12,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
   const decision = body?.decision as "accept" | "decline" | undefined;
+  const signature = body?.signature as string | undefined;
 
   if (decision !== "accept" && decision !== "decline") {
     return NextResponse.json({ error: "decision doit être 'accept' ou 'decline'" }, { status: 400 });
@@ -19,7 +20,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const offer = await prisma.agencyOffer.findUnique({
     where: { id },
-    include: { project: true, agencySeller: true },
+    include: { project: { include: { user: { select: { id: true, name: true } } } }, agencySeller: true },
   });
 
   if (!offer || offer.project.userId !== session.user.id) {
@@ -38,7 +39,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ success: true, offer: updated });
   }
 
-  // decision === "accept" : le paiement doit reussir avant de considerer l'offre acceptee.
+  // decision === "accept" : signature + acceptation des conditions requises avant tout paiement.
+  if (!signature || typeof signature !== "string" || !signature.trim()) {
+    return NextResponse.json(
+      { error: "Une signature (nom complet) est requise pour accepter la vente" },
+      { status: 400 }
+    );
+  }
+
+  const ownerName = offer.project.user.name;
+  if (!ownerName || signature.trim().toLowerCase() !== ownerName.trim().toLowerCase()) {
+    return NextResponse.json(
+      { error: "La signature ne correspond pas au nom associé à votre compte" },
+      { status: 400 }
+    );
+  }
+
   const { stripeCustomerId, defaultPaymentMethodId } = offer.agencySeller;
 
   if (!stripeCustomerId || !defaultPaymentMethodId) {
@@ -50,7 +66,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   await prisma.agencyOffer.update({
     where: { id },
-    data: { status: "ACCEPTED", respondedAt: new Date() },
+    data: {
+      status: "ACCEPTED",
+      respondedAt: new Date(),
+      signedAt: new Date(),
+      signatureText: signature.trim(),
+      termsVersion: "2026-08-17",
+    },
   });
 
   try {

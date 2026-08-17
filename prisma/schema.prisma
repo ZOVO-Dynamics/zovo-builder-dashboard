@@ -668,6 +668,10 @@ model AgencyOffer {
   stripePaymentIntentId String?
   paidAt DateTime?
 
+  signedAt      DateTime?
+  signatureText String?
+  termsVersion  String?
+
   @@index([projectId])
   @@index([agencySellerId])
   @@index([status])

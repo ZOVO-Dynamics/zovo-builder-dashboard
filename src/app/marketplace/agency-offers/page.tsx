@@ -31,6 +31,9 @@ export default function AgencyOffersPage() {
   const [data, setData] = useState<OffersResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [respondingId, setRespondingId] = useState<string | null>(null);
+  const [signOffer, setSignOffer] = useState<Offer | null>(null);
+  const [agreed, setAgreed] = useState(false);
+  const [signature, setSignature] = useState("");
 
   function load() {
     fetch("/api/marketplace/agency-offers")
@@ -43,15 +46,31 @@ export default function AgencyOffersPage() {
     load();
   }, []);
 
-  async function respond(offerId: string, decision: "accept" | "decline") {
+  function openSignModal(offer: Offer) {
+    setSignOffer(offer);
+    setAgreed(false);
+    setSignature("");
+  }
+
+  function closeSignModal() {
+    setSignOffer(null);
+    setAgreed(false);
+    setSignature("");
+  }
+
+  async function respond(offerId: string, decision: "accept" | "decline", signatureValue?: string) {
     setRespondingId(offerId);
     try {
       const res = await fetch(`/api/marketplace/agency-offers/${offerId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision }),
+        body: JSON.stringify({ decision, ...(signatureValue ? { signature: signatureValue } : {}) }),
       });
-      if (!res.ok) throw new Error("Impossible de traiter cette offre");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? "Impossible de traiter cette offre");
+      }
+      closeSignModal();
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -125,7 +144,7 @@ export default function AgencyOffersPage() {
               {data.role === "owner" && offer.status === "PENDING" && (
                 <div className="flex gap-2 pt-2">
                   <button
-                    onClick={() => respond(offer.id, "accept")}
+                    onClick={() => openSignModal(offer)}
                     disabled={respondingId === offer.id}
                     className="rounded-md bg-[#C9A227] hover:bg-[#E8C34A] disabled:opacity-50 px-4 py-2 text-sm font-medium text-[#0A0A0C]"
                   >
@@ -142,6 +161,85 @@ export default function AgencyOffersPage() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {signOffer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-lg border border-[#2A2A2E] bg-[#16161A] p-6 space-y-4">
+            <div>
+              <h2 style={{ fontFamily: "var(--font-display)" }} className="text-lg font-bold text-[#F5F1E8]">
+                Confirmer la vente
+              </h2>
+              <p className="mt-1 text-sm text-[#9B9B95]">
+                {signOffer.project.name} — {formatPrice(signOffer.priceCents, signOffer.currency)}
+              </p>
+            </div>
+
+            <div className="rounded-md border border-[#2A2A2E] bg-[#0A0A0C] p-3 text-xs text-[#9B9B95] space-y-2">
+              <p>
+                En acceptant cette offre, vous vendez votre projet à l&apos;agence acheteuse pour le montant
+                indiqué. Une fois le paiement confirmé, vous perdrez définitivement la propriété et l&apos;accès
+                à ce projet.
+              </p>
+              <p>
+                Cette vente est régie par les{" "}
+                <Link href="/terms" target="_blank" className="text-[#E8C34A] underline">
+                  conditions de mise en vente
+                </Link>{" "}
+                et la{" "}
+                <Link href="/terms" target="_blank" className="text-[#E8C34A] underline">
+                  politique de paiement
+                </Link>{" "}
+                de ZOVO.
+              </p>
+            </div>
+
+            <label className="flex items-start gap-2 text-sm text-[#F5F1E8]">
+              <input
+                type="checkbox"
+                checked={agreed}
+                onChange={(e) => setAgreed(e.target.checked)}
+                className="mt-1"
+              />
+              <span>
+                J&apos;ai lu et j&apos;accepte les conditions de mise en vente et la politique de paiement, et je
+                reconnais que je ne serai plus propriétaire de ce projet une fois la vente conclue.
+              </span>
+            </label>
+
+            <div>
+              <label className="block text-xs text-[#9B9B95] mb-1">
+                Tapez votre nom complet pour signer
+              </label>
+              <input
+                type="text"
+                value={signature}
+                onChange={(e) => setSignature(e.target.value)}
+                placeholder="Nom complet"
+                className="w-full rounded-md border border-[#2A2A2E] bg-[#0A0A0C] px-3 py-2 text-sm text-[#F5F1E8] outline-none focus:border-[#C9A227]"
+              />
+            </div>
+
+            {error && <p className="text-xs text-red-400">{error}</p>}
+
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => respond(signOffer.id, "accept", signature)}
+                disabled={!agreed || !signature.trim() || respondingId === signOffer.id}
+                className="flex-1 rounded-md bg-[#C9A227] hover:bg-[#E8C34A] disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2 text-sm font-medium text-[#0A0A0C]"
+              >
+                {respondingId === signOffer.id ? "Traitement..." : "Signer et vendre"}
+              </button>
+              <button
+                onClick={closeSignModal}
+                disabled={respondingId === signOffer.id}
+                className="rounded-md border border-[#2A2A2E] px-4 py-2 text-sm text-[#9B9B95] hover:text-[#F5F1E8]"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
