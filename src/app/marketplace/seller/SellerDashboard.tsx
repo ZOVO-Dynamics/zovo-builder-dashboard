@@ -5,6 +5,7 @@ import Link from "next/link";
 import SponsorButton from "./SponsorButton";
 import PayoutButton from "./PayoutButton";
 import AnalyticsTable from "./AnalyticsTable";
+import StripeOnboardButton from "./StripeOnboardButton";
 
 type Product = {
   id: string;
@@ -78,11 +79,13 @@ export default function SellerDashboard({
   categories,
   stats,
   balanceCents,
+  payoutsEnabled,
 }: {
   seller: Seller;
   categories: Category[];
   stats: Stats;
   balanceCents: number;
+  payoutsEnabled: boolean;
 }) {
   const [creating, setCreating] = useState(false);
   const [becomingS, setBecomingS] = useState(false);
@@ -201,6 +204,8 @@ export default function SellerDashboard({
           {showForm ? "Annuler" : "+ Nouveau produit"}
         </button>
       </div>
+
+      {!payoutsEnabled && <StripeOnboardButton />}
 
       <div className="mb-6 flex items-center justify-between rounded-lg border border-[#2A2A2E] bg-[#16161A] p-4">
         <div>

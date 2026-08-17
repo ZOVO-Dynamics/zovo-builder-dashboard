@@ -19,6 +19,11 @@ export default async function SellerPage() {
     },
   });
 
+  const connectAccount = await prisma.connectAccount.findUnique({
+    where: { userId: session.user.id },
+    select: { payoutsEnabled: true },
+  });
+
   const sellerWithAgency = sellerRecord
     ? { ...sellerRecord, isBuyingAgency: sellerRecord.isBuyingAgency }
     : null;
@@ -90,6 +95,7 @@ export default async function SellerPage() {
       categories={categories}
       stats={stats}
       balanceCents={sellerRecord?.balanceCents ?? 0}
+      payoutsEnabled={connectAccount?.payoutsEnabled ?? false}
     />
   );
 }

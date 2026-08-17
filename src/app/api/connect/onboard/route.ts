@@ -49,8 +49,8 @@ export async function POST(req: NextRequest) {
 
     const accountLink = await stripe.accountLinks.create({
       account: stripeAccountId,
-      refresh_url: "https://www.zovo.ca/dashboard/sell?onboarding=refresh",
-      return_url: "https://www.zovo.ca/dashboard/sell?onboarding=complete",
+      refresh_url: "https://www.zovo.ca/marketplace/seller?onboarding=refresh",
+      return_url: "https://www.zovo.ca/marketplace/seller?onboarding=complete",
       type: "account_onboarding",
     });
 
