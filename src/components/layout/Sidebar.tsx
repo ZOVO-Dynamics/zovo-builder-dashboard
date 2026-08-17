@@ -7,11 +7,15 @@ import { signOut } from "next-auth/react";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/dashboard", label: "Generer" },
   { href: "/projects", label: "Projets" },
   { href: "/usage", label: "Usage" },
-  { href: "/marketplace", label: "Marketplace" },
   { href: "/pricing", label: "Pricing" },
+];
+
+const MARKETPLACE_ITEMS = [
+  { href: "/marketplace", label: "Parcourir" },
+  { href: "/marketplace/seller", label: "Mon espace vendeur" },
+  { href: "/marketplace/agency-offers", label: "Offres d'agences" },
 ];
 
 export default function Sidebar() {
@@ -72,6 +76,41 @@ export default function Sidebar() {
               </Link>
             );
           })}
+
+          <div className="pt-3">
+            <p className="px-3 pb-1 text-[10px] uppercase tracking-wider text-[#6B6560]">Marketplace</p>
+            {MARKETPLACE_ITEMS.map((item) => {
+              const isActive = pathname === item.href;
+              return (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  className={`flex items-center gap-3 rounded-md border px-3 py-2 text-sm transition-colors ${
+                    isActive
+                      ? "border-[#C9A227]/60 bg-[#1A1508] text-[#E8C34A]"
+                      : "border-transparent text-[#F5F1E8] hover:border-[#C9A227]/30 hover:bg-[#16161A]"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+
+          <div className="pt-3">
+            <Link
+              href="/account"
+              onClick={() => setOpen(false)}
+              className={`flex items-center gap-3 rounded-md border px-3 py-2 text-sm transition-colors ${
+                pathname === "/account"
+                  ? "border-[#C9A227]/60 bg-[#1A1508] text-[#E8C34A]"
+                  : "border-transparent text-[#F5F1E8] hover:border-[#C9A227]/30 hover:bg-[#16161A]"
+              }`}
+            >
+              Mon compte
+            </Link>
+          </div>
         </nav>
 
         <div className="mt-10 flex gap-3 px-3 text-xs text-[#6B6560]">
