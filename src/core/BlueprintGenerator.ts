@@ -72,6 +72,120 @@ const FEATURE_MAP: Record<string, {
   analytics: {
     files: ["src/lib/analytics.ts"],
   },
+  "file-upload": {
+    components: ["FileUploader"],
+    files: ["src/lib/upload.ts"],
+    dependencies: ["multer"],
+  },
+  oauth: {
+    components: ["OAuthButtons"],
+    files: ["src/lib/oauth.ts"],
+    dependencies: ["next-auth"],
+  },
+  "roles-permissions": {
+    components: ["RoleGuard"],
+    files: ["src/lib/permissions.ts"],
+  },
+  "two-factor-auth": {
+    components: ["TwoFactorForm"],
+    files: ["src/lib/twofactor.ts"],
+  },
+  "audit-log": {
+    components: ["AuditLogTable"],
+    files: ["src/lib/audit-log.ts"],
+    routes: ["/security/audit"],
+  },
+  "rate-limiting": {
+    files: ["src/lib/rate-limit.ts"],
+  },
+  "rest-api": {
+    files: ["src/app/api/v1/route.ts", "API.md"],
+  },
+  webhooks: {
+    files: ["src/app/api/webhooks/route.ts", "src/lib/webhooks.ts"],
+  },
+  "mcp-server": {
+    files: ["src/lib/mcp/server.ts", "MCP.md"],
+  },
+  "third-party-integration": {
+    files: ["src/lib/integrations.ts"],
+  },
+  "realtime-sync": {
+    files: ["src/lib/realtime.ts"],
+    dependencies: ["ws"],
+  },
+  "data-export": {
+    components: ["ExportButton"],
+    files: ["src/lib/export.ts"],
+  },
+  marketplace: {
+    components: ["MarketplaceBrowser", "SellerDashboard"],
+    routes: ["/marketplace"],
+    files: ["src/lib/marketplace.ts"],
+  },
+  "subscription-billing": {
+    components: ["BillingPanel"],
+    routes: ["/billing"],
+    files: ["src/lib/billing.ts"],
+    dependencies: ["stripe"],
+  },
+  invoicing: {
+    components: ["InvoiceList"],
+    files: ["src/lib/invoicing.ts"],
+  },
+  comments: {
+    components: ["CommentThread", "CommentForm"],
+    files: ["src/lib/comments.ts"],
+  },
+  cms: {
+    components: ["ContentEditor", "ArticleList"],
+    routes: ["/content"],
+    files: ["src/lib/cms.ts"],
+  },
+  "media-gallery": {
+    components: ["MediaGallery"],
+    routes: ["/gallery"],
+  },
+  "reviews-ratings": {
+    components: ["ReviewList", "RatingStars"],
+    files: ["src/lib/reviews.ts"],
+  },
+  recommendations: {
+    files: ["src/lib/recommendations.ts"],
+  },
+  multilingual: {
+    files: ["src/lib/i18n.ts"],
+    dependencies: ["next-intl"],
+  },
+  "team-workspace": {
+    components: ["WorkspaceSwitcher", "TeamMembers"],
+    routes: ["/workspace"],
+    files: ["src/lib/workspace.ts"],
+  },
+  "calendar-scheduling": {
+    components: ["Calendar", "BookingForm"],
+    routes: ["/calendar"],
+    files: ["src/lib/scheduling.ts"],
+  },
+  "automated-tests": {
+    files: ["vitest.config.ts", "TESTING.md"],
+    dependencies: ["vitest"],
+  },
+  "ci-cd": {
+    files: [".github/workflows/deploy.yml", "DEPLOYMENT.md"],
+  },
+  monitoring: {
+    files: ["src/app/api/health/route.ts"],
+  },
+  "error-tracking": {
+    files: ["src/lib/error-tracking.ts"],
+  },
+  "backup-restore": {
+    files: ["src/lib/backup.ts"],
+  },
+  accessibility: {
+    files: ["ACCESSIBILITY.md"],
+  },
 };
 
 const BASE_FOLDERS = [

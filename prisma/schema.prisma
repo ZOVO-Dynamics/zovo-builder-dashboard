@@ -20,6 +20,17 @@ model User {
   image         String?
   passwordHash  String?
   isAdmin       Boolean   @default(false)
+  isBusiness     Boolean @default(false)
+  businessNumber String?
+  website        String?
+  dateOfBirth        DateTime?
+  gender             String?
+  addressStreet      String?
+  addressCity        String?
+  addressProvince    String?
+  addressPostalCode  String?
+  phone              String?
+  termsAcceptedAt    DateTime?
 
   plan         Plan     @default(FREE)
   monthlyUsage Int      @default(0)
@@ -203,6 +214,7 @@ model Project {
   versions            ProjectVersion[]
   repairJobs          RepairJob[]
   marketplaceProducts MarketplaceProduct[]
+  agencyOffers        AgencyOffer[]
 
   @@index([userId])
 }
@@ -471,6 +483,9 @@ model MarketplaceSeller {
   displayName  String?
   bio          String?    @db.Text
   suspended    Boolean    @default(false)
+  isBuyingAgency Boolean  @default(false)
+  stripeCustomerId       String?
+  defaultPaymentMethodId String?
   balanceCents Int        @default(0)
   ratingAvg    Float      @default(0)
   ratingCount  Int        @default(0)
@@ -479,6 +494,7 @@ model MarketplaceSeller {
   orders     MarketplaceOrder[]
   payouts    SellerPayout[]
   placements SponsoredPlacement[]
+  agencyOffersMade AgencyOffer[] @relation("AgencyOffersMade")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -617,6 +633,46 @@ model SellerPayout {
   @@index([sellerId])
   @@index([status])
 }
+
+enum AgencyOfferType {
+  PROJECT_PURCHASE
+  CONTACT_RIGHT
+}
+
+enum AgencyOfferStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  PAID
+  PAYMENT_FAILED
+}
+
+model AgencyOffer {
+  id        String @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  agencySellerId String
+  agencySeller   MarketplaceSeller @relation("AgencyOffersMade", fields: [agencySellerId], references: [id], onDelete: Cascade)
+
+  type            AgencyOfferType
+  priceCents      Int
+  currency        String            @default("CAD")
+  message         String?           @db.Text
+  status          AgencyOfferStatus @default(PENDING)
+  commissionCents Int
+
+  createdAt  DateTime  @default(now())
+  respondedAt DateTime?
+  stripePaymentIntentId String?
+  paidAt DateTime?
+
+  @@index([projectId])
+  @@index([agencySellerId])
+  @@index([status])
+}
+
 
 model MarketplaceAnalyticsEvent {
   id                   String                        @id @default(cuid())

@@ -25,8 +25,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Prompt requis" }, { status: 400 });
     }
 
-    if (prompt.length > 2000) {
-      return NextResponse.json({ error: "Prompt trop long (max 2000 caractères)" }, { status: 400 });
+    if (prompt.length > 15000) {
+      return NextResponse.json({ error: "Prompt trop long (max 15 000 caractères)" }, { status: 400 });
     }
 
     const blueprint = await aiPromptAnalyzer.analyze(prompt);

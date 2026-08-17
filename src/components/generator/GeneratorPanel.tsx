@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import RepairCard from "./RepairCard";
 import ValueCounter from "./ValueCounter";
+import { AnimatePresence } from "framer-motion";
+import { NeuralOrb } from "../genesis/NeuralOrb";
+import { FloatingFileCard } from "../genesis/FloatingFileCard";
+import { useGenesis } from "../../hooks/useGenesis";
+import { ZovoBridgeClient } from "../../core/ZovoBridgeClient";
 
 interface BlueprintResult {
   success: boolean;
@@ -23,6 +27,8 @@ interface ProjectSummary {
 }
 
 export default function GeneratorPanel() {
+  const { status, projectedFiles } = useGenesis();
+  const bridgeRef = useRef<ZovoBridgeClient | null>(null);
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [progressLabel, setProgressLabel] = useState("");
@@ -84,20 +90,60 @@ export default function GeneratorPanel() {
   const [pendingFeatures, setPendingFeatures] = useState<string[]>([]);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
 
-  const ALL_FEATURES: { key: string; label: string }[] = [
-    { key: "authentication", label: "Authentification (connexion/inscription)" },
-    { key: "dashboard", label: "Tableau de bord" },
-    { key: "database", label: "Base de données" },
-    { key: "api", label: "API personnalisee" },
-    { key: "crud", label: "Gestion create/read/update/delete" },
-    { key: "payments", label: "Paiements (Stripe)" },
-    { key: "notifications", label: "Notifications" },
-    { key: "search", label: "Recherche/filtrage" },
-    { key: "chat", label: "Messagerie/chat" },
-    { key: "admin", label: "Panneau admin" },
-    { key: "profile", label: "Profil utilisateur" },
-    { key: "email", label: "Emails transactionnels" },
-    { key: "analytics", label: "Analytique/statistiques d'usage" },
+  const ALL_FEATURES: { key: string; label: string; category: string }[] = [
+    { key: "dashboard", label: "Tableau de bord", category: "Fondations" },
+    { key: "database", label: "Base de données", category: "Fondations" },
+    { key: "api", label: "API personnalisée", category: "Fondations" },
+    { key: "crud", label: "Gestion create/read/update/delete", category: "Fondations" },
+    { key: "file-upload", label: "Téléversement de fichiers/images", category: "Fondations" },
+    { key: "search", label: "Recherche/filtrage", category: "Fondations" },
+    { key: "authentication", label: "Authentification (connexion/inscription)", category: "Authentification & Sécurité" },
+    { key: "oauth", label: "Connexion via Google/GitHub/etc.", category: "Authentification & Sécurité" },
+    { key: "roles-permissions", label: "Rôles et permissions granulaires", category: "Authentification & Sécurité" },
+    { key: "two-factor-auth", label: "Authentification à deux facteurs (2FA)", category: "Authentification & Sécurité" },
+    { key: "audit-log", label: "Journal d'audit", category: "Authentification & Sécurité" },
+    { key: "rate-limiting", label: "Limitation de débit (anti-abus)", category: "Authentification & Sécurité" },
+    { key: "rest-api", label: "API REST publique documentée", category: "Données & API" },
+    { key: "webhooks", label: "Webhooks entrants/sortants", category: "Données & API" },
+    { key: "mcp-server", label: "Serveur MCP pour agents IA", category: "Données & API" },
+    { key: "third-party-integration", label: "Intégration service externe", category: "Données & API" },
+    { key: "realtime-sync", label: "Synchronisation temps réel", category: "Données & API" },
+    { key: "data-export", label: "Export de données (CSV/PDF/JSON)", category: "Données & API" },
+    { key: "payments", label: "Paiements (Stripe)", category: "Commerce" },
+    { key: "marketplace", label: "Place de marché multi-vendeurs", category: "Commerce" },
+    { key: "subscription-billing", label: "Facturation récurrente/abonnements", category: "Commerce" },
+    { key: "invoicing", label: "Génération de factures", category: "Commerce" },
+    { key: "notifications", label: "Notifications", category: "Communication" },
+    { key: "email", label: "Emails transactionnels", category: "Communication" },
+    { key: "chat", label: "Messagerie/chat", category: "Communication" },
+    { key: "comments", label: "Commentaires", category: "Communication" },
+    { key: "cms", label: "Gestion de contenu éditorial", category: "Contenu & Découverte" },
+    { key: "media-gallery", label: "Galerie photo/vidéo", category: "Contenu & Découverte" },
+    { key: "reviews-ratings", label: "Avis et notes", category: "Contenu & Découverte" },
+    { key: "recommendations", label: "Recommandations personnalisées", category: "Contenu & Découverte" },
+    { key: "multilingual", label: "Support multilingue", category: "Contenu & Découverte" },
+    { key: "admin", label: "Panneau admin", category: "Collaboration & Admin" },
+    { key: "profile", label: "Profil utilisateur", category: "Collaboration & Admin" },
+    { key: "team-workspace", label: "Espaces de travail collaboratifs", category: "Collaboration & Admin" },
+    { key: "calendar-scheduling", label: "Calendrier/prise de rendez-vous", category: "Collaboration & Admin" },
+    { key: "analytics", label: "Analytique/statistiques d'usage", category: "Collaboration & Admin" },
+    { key: "automated-tests", label: "Tests automatisés", category: "Qualité & Infrastructure" },
+    { key: "ci-cd", label: "Intégration/déploiement continus", category: "Qualité & Infrastructure" },
+    { key: "monitoring", label: "Surveillance/health checks", category: "Qualité & Infrastructure" },
+    { key: "error-tracking", label: "Suivi des erreurs", category: "Qualité & Infrastructure" },
+    { key: "backup-restore", label: "Sauvegarde et restauration", category: "Qualité & Infrastructure" },
+    { key: "accessibility", label: "Accessibilité renforcée (a11y)", category: "Qualité & Infrastructure" },
+  ];
+
+  const FEATURE_CATEGORIES = [
+    "Fondations",
+    "Authentification & Sécurité",
+    "Données & API",
+    "Commerce",
+    "Communication",
+    "Contenu & Découverte",
+    "Collaboration & Admin",
+    "Qualité & Infrastructure",
   ];
 
   function toggleFeature(key: string) {
@@ -153,6 +199,7 @@ export default function GeneratorPanel() {
       }
 
       const jobId = data.jobId;
+      bridgeRef.current = new ZovoBridgeClient(jobId);
       let elapsed = 0;
 
       pollRef.current = setInterval(async () => {
@@ -177,11 +224,13 @@ export default function GeneratorPanel() {
 
           if (statusData.status === "completed") {
             if (pollRef.current) clearInterval(pollRef.current);
+            setTimeout(() => { bridgeRef.current?.close(); bridgeRef.current = null; }, 2000);
             setResult(statusData.result);
             setLoading(false);
             setProgressPercent(null);
           } else if (statusData.status === "failed") {
             if (pollRef.current) clearInterval(pollRef.current);
+            setTimeout(() => { bridgeRef.current?.close(); bridgeRef.current = null; }, 2000);
             setResult({ success: false, error: statusData.error || "La génération a échoué" });
             setLoading(false);
             setProgressPercent(null);
@@ -268,6 +317,7 @@ export default function GeneratorPanel() {
       }
 
       const jobId = data.jobId;
+      bridgeRef.current = new ZovoBridgeClient(jobId);
       let elapsed = 0;
       setPendingBlueprint(null);
 
@@ -293,11 +343,13 @@ export default function GeneratorPanel() {
 
           if (statusData.status === "completed") {
             if (pollRef.current) clearInterval(pollRef.current);
+            setTimeout(() => { bridgeRef.current?.close(); bridgeRef.current = null; }, 2000);
             setResult(statusData.result);
             setLoading(false);
             setProgressPercent(null);
           } else if (statusData.status === "failed") {
             if (pollRef.current) clearInterval(pollRef.current);
+            setTimeout(() => { bridgeRef.current?.close(); bridgeRef.current = null; }, 2000);
             setResult({ success: false, error: statusData.error || "La génération a échoué" });
             setLoading(false);
             setProgressPercent(null);
@@ -438,7 +490,14 @@ export default function GeneratorPanel() {
         <span style={{ fontFamily: "var(--font-mono)" }} className="text-xs text-[#E8C34A]">GENERATEUR</span>
         <h2 style={{ fontFamily: "var(--font-display)" }} className="mt-1 text-lg font-bold">Generer une application</h2>
       </div>
-
+      <div className="relative rounded-xl border border-[#2A2A2E] bg-[#1D1D22] h-64 overflow-hidden flex items-center justify-center">
+        <NeuralOrb status={status} />
+        <AnimatePresence>
+          {projectedFiles.slice(-4).map((file, i) => (
+            <FloatingFileCard key={file.id} file={file} index={i} compact />
+          ))}
+        </AnimatePresence>
+      </div>
       {stuckJob && (
         <div className="rounded-lg border border-amber-700/60 bg-amber-950/40 p-3 space-y-2">
           <p className="text-sm text-amber-300">
@@ -475,32 +534,37 @@ export default function GeneratorPanel() {
 
       <ValueCounter projectId={selectedProject !== "new" ? selectedProject : null} />
 
-      <textarea
-        autoComplete="off"
-        className="w-full rounded-lg bg-[#0A0A0C] border border-[#2A2A2E] p-3 text-sm min-h-[100px] text-[#F5F1E8] placeholder:text-[#9B9B95] focus:border-[#C9A227] outline-none"
-        placeholder={
-          selectedProject !== "new"
-            ? "Decris ce que tu veux ajouter ou modifier..."
-            : "Decris l'application que tu veux creer..."
-        }
-        value={prompt}
-        onChange={(e) => setPrompt(e.target.value)}
-        disabled={loading}
-      />
+      <div className="flex gap-2 items-stretch">
+        <textarea
+          autoComplete="off"
+          rows={1}
+          className="flex-1 rounded-lg bg-[#0A0A0C] border border-[#2A2A2E] p-3 text-sm min-h-[48px] max-h-[48px] resize-none text-[#F5F1E8] placeholder:text-[#9B9B95] focus:border-[#C9A227] outline-none"
+          placeholder={
+            selectedProject !== "new"
+              ? "Decris ce que tu veux ajouter ou modifier..."
+              : "Decris l'application que tu veux creer..."
+          }
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          disabled={loading}
+        />
 
-      <button
+        <button
         onClick={handleAnalyze}
-        disabled={analyzing || loading}
+        disabled={analyzing || loading || Boolean(pendingBlueprint)}
         className="rounded-md bg-[#C9A227] hover:bg-[#E8C34A] disabled:bg-[#2A2A2E] disabled:cursor-not-allowed px-4 py-2 text-sm font-medium text-[#0A0A0C]"
       >
         {analyzing
           ? "Analyse du prompt..."
           : loading
           ? `${progressLabel || "Generation en cours..."}${progressPercent !== null ? ` (${progressPercent}%)` : ""}`
+          : pendingBlueprint
+          ? "En attente de confirmation..."
           : prompt.trim()
           ? "Analyser"
           : "Reprendre la Génération"}
       </button>
+      </div>
 
       {analyzeError && (
         <div className="rounded-lg bg-red-950/40 border border-red-800/60 p-3 text-sm text-red-300">
@@ -513,17 +577,24 @@ export default function GeneratorPanel() {
           <p className="text-sm text-[#9B9B95]">
             Fonctionnalites detectees pour <strong className="text-[#F5F1E8]">{String(pendingBlueprint.projectName ?? "")}</strong> — decoche celles que tu ne veux pas :
           </p>
-          <div className="space-y-2">
-            {ALL_FEATURES.map((feature) => (
-              <label key={feature.key} className="flex items-center gap-2 text-sm text-[#D8CBA3]">
-                <input
-                  type="checkbox"
-                  checked={pendingFeatures.includes(feature.key)}
-                  onChange={() => toggleFeature(feature.key)}
-                  className="accent-[#C9A227]"
-                />
-                {feature.label}
-              </label>
+          <div className="space-y-4">
+            {FEATURE_CATEGORIES.map((category) => (
+              <div key={category}>
+                <p className="text-xs uppercase tracking-wide text-[#C9A227] mb-1">{category}</p>
+                <div className="space-y-2">
+                  {ALL_FEATURES.filter((f) => f.category === category).map((feature) => (
+                    <label key={feature.key} className="flex items-center gap-2 text-sm text-[#D8CBA3]">
+                      <input
+                        type="checkbox"
+                        checked={pendingFeatures.includes(feature.key)}
+                        onChange={() => toggleFeature(feature.key)}
+                        className="accent-[#C9A227]"
+                      />
+                      {feature.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
           <button
@@ -596,11 +667,6 @@ export default function GeneratorPanel() {
               {deployLoading ? `${deployLabel || "Deploiement..."}${deployPercent !== null ? ` (${deployPercent}%)` : ""}` : "ZOVO Deploy"}
             </button>
           </div>
-
-          <RepairCard
-            projectId={result?.projectRecordId ?? null}
-            validationFailed={Boolean(result?.success && result.validation && result.validation.valid === false)}
-          />
 
           {deployError && (
             <div className="rounded-lg bg-red-950/40 border border-red-800/60 p-3 text-sm text-red-300">

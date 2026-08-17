@@ -23,6 +23,7 @@ type Seller = {
   tier: string;
   suspended: boolean;
   products: Product[];
+  isBuyingAgency: boolean;
 } | null;
 
 type Category = { id: string; name: string };
@@ -97,6 +98,20 @@ export default function SellerDashboard({
     } catch (err) {
       setFormError(err instanceof Error ? err.message : String(err));
       setBecomingS(false);
+    }
+  }
+
+  async function handleToggleAgency() {
+    try {
+      const res = await fetch("/api/marketplace/seller/agency", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isBuyingAgency: !seller?.isBuyingAgency }),
+      });
+      if (!res.ok) throw new Error("Impossible de mettre a jour le statut d'agence");
+      window.location.reload();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -184,6 +199,19 @@ export default function SellerDashboard({
           className="rounded-md bg-[#C9A227] px-4 py-2 font-medium text-[#0A0A0C] transition hover:bg-[#E8C34A]"
         >
           {showForm ? "Annuler" : "+ Nouveau produit"}
+        </button>
+      </div>
+
+      <div className="mb-6 flex items-center justify-between rounded-lg border border-[#2A2A2E] bg-[#16161A] p-4">
+        <div>
+          <p className="text-sm font-medium">Agence acheteuse</p>
+          <p className="text-xs text-[#9B9B95]">Rejoins le pool d&apos;agences notifiees pour les projets complexes.</p>
+        </div>
+        <button
+          onClick={handleToggleAgency}
+          className={`shrink-0 rounded-md px-4 py-2 text-sm font-medium transition ${seller.isBuyingAgency ? "bg-[#C9A227] text-[#0A0A0C] hover:bg-[#E8C34A]" : "border border-[#2A2A2E] text-[#9B9B95] hover:border-[#C9A227]/40"}`}
+        >
+          {seller.isBuyingAgency ? "Activee" : "Activer"}
         </button>
       </div>
 

@@ -1,3 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ ! -f "package.json" ]; then
+  echo "Erreur : aucun package.json trouvé ici. Lance ce script depuis ~/zovo-builder-dashboard"
+  exit 1
+fi
+
+if [ ! -f "src/hooks/useGenesis.ts" ]; then
+  echo "Erreur : src/hooks/useGenesis.ts introuvable. As-tu bien lancé install-genesis-dashboard.sh avant ?"
+  exit 1
+fi
+
+cp "src/hooks/useGenesis.ts" "src/hooks/useGenesis.ts.bak-$(date +%s)"
+echo "Sauvegarde créée."
+
+cat > "src/hooks/useGenesis.ts" << 'ZOVOGENESISEOF'
 import { useEffect, useState } from "react";
 import { GenesisBus, GenesisEvent } from "../core/ZovoGenesisBus";
 
@@ -89,3 +106,14 @@ export function useGenesis(): UseGenesisResult {
 
   return { status, projectedFiles };
 }
+ZOVOGENESISEOF
+
+echo " -> src/hooks/useGenesis.ts réécrit (compatible GenesisBus client existant)"
+echo ""
+echo "=== Vérification TypeScript (tsc --noEmit) ==="
+if npx tsc --noEmit; then
+  echo "OK : aucune erreur TypeScript."
+else
+  echo "ATTENTION : erreurs TypeScript ci-dessus a corriger."
+  exit 1
+fi

@@ -18,6 +18,23 @@ export interface JobEvent {
 const jobEvents = new Map<string, JobEvent[]>();
 
 /** Ajoute un événement au journal d'un job (créé implicitement au premier appel). */
+
+async function relayToGenesisBridge(jobId: string, type: string, payload: unknown) {
+  const url = process.env.ZOVO_BUILDER_INTERNAL_URL;
+  const secret = process.env.INTERNAL_GENESIS_SECRET;
+  if (!url || !secret) return;
+
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-secret': secret },
+      body: JSON.stringify({ jobId, type, payload }),
+    });
+  } catch (err) {
+    console.error('[JobEventLog] failed to relay event to ZovoBridge', err);
+  }
+}
+
 export function pushJobEvent(
   jobId: string,
   type: JobEvent["type"],
@@ -26,6 +43,10 @@ export function pushJobEvent(
   const list = jobEvents.get(jobId) ?? [];
   list.push({ type, payload, ts: Date.now() });
   jobEvents.set(jobId, list);
+
+
+  // relais vers ZovoBridge (fire-and-forget, ne bloque jamais l'appelant)
+  void relayToGenesisBridge(jobId, type, payload);
 }
 
 /** Événements après l'index `since` (exclusif) — pour un polling incrémental côté frontend. */

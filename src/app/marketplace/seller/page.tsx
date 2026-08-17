@@ -19,6 +19,10 @@ export default async function SellerPage() {
     },
   });
 
+  const sellerWithAgency = sellerRecord
+    ? { ...sellerRecord, isBuyingAgency: sellerRecord.isBuyingAgency }
+    : null;
+
   const categories = await prisma.marketplaceCategory.findMany({
     orderBy: { name: "asc" },
     select: { id: true, name: true },
@@ -66,6 +70,7 @@ export default async function SellerPage() {
         displayName: sellerRecord.displayName,
         tier: sellerRecord.tier,
         suspended: sellerRecord.suspended,
+        isBuyingAgency: sellerRecord.isBuyingAgency,
         products: sellerRecord.products.map((p) => ({
           id: p.id,
           title: p.title,

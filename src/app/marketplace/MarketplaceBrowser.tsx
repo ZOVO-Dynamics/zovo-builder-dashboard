@@ -73,8 +73,9 @@ function ProductCard({ product }: { product: Product }) {
           logEvent(product.id, "SPONSORED_CLICK", product.activePlacementId);
         }
       }}
-      className="group relative rounded-lg border border-[#2A2A2E] bg-[#16161A] p-4 transition hover:border-[#C9A227]"
+      className="group relative overflow-hidden rounded-lg border border-[#2A2A2E] bg-[#16161A] p-4 transition hover:border-[#C9A227]"
     >
+      <div className="pointer-events-none absolute -top-10 -right-10 h-24 w-24 rounded-full bg-[#C9A227]/0 blur-2xl transition-colors group-hover:bg-[#C9A227]/15" />
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           {product.isSponsored && (

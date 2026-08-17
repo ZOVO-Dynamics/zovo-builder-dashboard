@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { checkGenerationEntitlement, recordGeneration } from "@/lib/entitlements";
 import { rateLimit } from "@/lib/rate-limit";
 import { pushJobEvent } from "@/core/JobEventLog";
+import { notifyAgenciesIfComplex } from "@/core/AgencyOfferTrigger";
 
 async function runGenerationJob(
   jobId: string,
@@ -139,6 +140,11 @@ async function runGenerationJob(
     });
 
     pushJobEvent(jobId, "INTEGRATION_COMPLETE");
+
+    notifyAgenciesIfComplex(project.id, project.name, projectBlueprint.features ?? []).catch((err) => {
+      console.error("notifyAgenciesIfComplex unhandled error:", err);
+    });
+
     await prisma.generationJob.update({
       where: { id: jobId },
       data: {
@@ -200,8 +206,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Prompt requis" }, { status: 400 });
     }
 
-    if (prompt.length > 2000) {
-      return NextResponse.json({ error: "Prompt trop long (max 2000 caractères)" }, { status: 400 });
+    if (prompt.length > 15000) {
+      return NextResponse.json({ error: "Prompt trop long (max 15 000 caractères)" }, { status: 400 });
     }
 
     let existingProject = null;
