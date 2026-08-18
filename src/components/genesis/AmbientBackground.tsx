@@ -13,8 +13,9 @@ type Particle = {
 };
 
 /**
- * Particules dorees flottant lentement vers le haut, en arriere-plan fixe
- * (visible derriere toute la page pendant le defilement). Rendu via canvas
+ * Particules ambre (#F59E0B) flottant lentement vers le haut, en arriere-plan
+ * fixe plein ecran (visible derriere toute la page pendant le defilement,
+ * donc sur toute la largeur et la hauteur parcourues). Rendu via canvas
  * + requestAnimationFrame pour rester fluide, y compris sur mobile.
  */
 export const AmbientParticles = () => {
@@ -35,11 +36,13 @@ export const AmbientParticles = () => {
     let rafId = 0;
 
     const makeParticles = () => {
-      const count = Math.min(50, Math.max(18, Math.floor(width / 32)));
+      // Densite moyenne a faible pour ne pas surcharger le contenu
+      const count = Math.min(45, Math.max(15, Math.floor(width / 36)));
       particles = Array.from({ length: count }, () => ({
         x: Math.random() * width,
         y: Math.random() * height,
-        r: Math.random() * 1.4 + 0.5,
+        // Diametre ~1-2px, aligne sur la taille des points du maillage du globe
+        r: Math.random() * 0.5 + 0.5,
         speed: Math.random() * 0.22 + 0.06,
         drift: Math.random() * 0.4 - 0.2,
         phase: Math.random() * Math.PI * 2,
@@ -74,7 +77,7 @@ export const AmbientParticles = () => {
         }
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(212, 175, 55, ${p.opacity})`;
+        ctx.fillStyle = `rgba(245, 158, 11, ${p.opacity})`;
         ctx.fill();
       }
       if (!prefersReducedMotion) {
