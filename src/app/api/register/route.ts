@@ -18,10 +18,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { email, password, name } = await req.json();
+    const { email, password, name, isBusiness, companyName, website, acceptedTerms } =
+      await req.json();
 
     if (!email || !password) {
       return NextResponse.json({ error: "Email et mot de passe requis" }, { status: 400 });
+    }
+
+    if (!acceptedTerms) {
+      return NextResponse.json(
+        { error: "Tu dois accepter les conditions générales et la politique de confidentialité" },
+        { status: 400 }
+      );
+    }
+
+    if (String(password).length < 8) {
+      return NextResponse.json(
+        { error: "Le mot de passe doit contenir au moins 8 caractères" },
+        { status: 400 }
+      );
     }
 
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -32,7 +47,15 @@ export async function POST(req: NextRequest) {
     const passwordHash = await bcrypt.hash(password, 10);
 
     const user = await prisma.user.create({
-      data: { email, passwordHash, name: name || null },
+      data: {
+        email,
+        passwordHash,
+        name: name || null,
+        isBusiness: Boolean(isBusiness),
+        companyName: isBusiness ? (companyName?.trim() || null) : null,
+        website: website?.trim() || null,
+        termsAcceptedAt: new Date(),
+      },
     });
 
     const { data, error } = await resend.emails.send({

@@ -9,6 +9,7 @@ const SELECT_FIELDS = {
   name: true,
   isBusiness: true,
   businessNumber: true,
+  companyName: true,
   website: true,
   dateOfBirth: true,
   gender: true,
@@ -18,6 +19,8 @@ const SELECT_FIELDS = {
   addressPostalCode: true,
   phone: true,
   termsAcceptedAt: true,
+  notifyProductUpdates: true,
+  notifyBillingAlerts: true,
 } as const;
 
 export async function GET() {
@@ -28,14 +31,20 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: SELECT_FIELDS,
+    select: {
+      ...SELECT_FIELDS,
+      accounts: { select: { provider: true } },
+    },
   });
 
   if (!user) {
     return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
   }
 
-  return NextResponse.json({ user });
+  const { accounts, ...rest } = user;
+  const hasGithub = accounts.some((a) => a.provider === "github");
+
+  return NextResponse.json({ user: { ...rest, hasGithub } });
 }
 
 export async function PATCH(req: NextRequest) {
@@ -59,7 +68,10 @@ export async function PATCH(req: NextRequest) {
     newPassword,
     isBusiness,
     businessNumber,
+    companyName,
     website,
+    notifyProductUpdates,
+    notifyBillingAlerts,
   } = body as {
     name?: string;
     dateOfBirth?: string;
@@ -74,38 +86,11 @@ export async function PATCH(req: NextRequest) {
     newPassword?: string;
     isBusiness?: boolean;
     businessNumber?: string;
+    companyName?: string;
     website?: string;
+    notifyProductUpdates?: boolean;
+    notifyBillingAlerts?: boolean;
   };
-
-  // Champs obligatoires du formulaire d'informations personnelles.
-  const requiredFields: Record<string, string | undefined> = {
-    name,
-    dateOfBirth,
-    gender,
-    addressStreet,
-    addressCity,
-    addressProvince,
-    addressPostalCode,
-    phone,
-  };
-
-  const missing = Object.entries(requiredFields).filter(
-    ([, v]) => !v || !String(v).trim()
-  );
-
-  if (missing.length > 0) {
-    return NextResponse.json(
-      { error: `Champs requis manquants : ${missing.map(([k]) => k).join(", ")}` },
-      { status: 400 }
-    );
-  }
-
-  if (!acceptedTerms) {
-    return NextResponse.json(
-      { error: "Tu dois accepter les conditions générales et la politique de confidentialité" },
-      { status: 400 }
-    );
-  }
 
   if (isBusiness && !businessNumber?.trim()) {
     return NextResponse.json(
@@ -114,30 +99,44 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
-  const parsedDob = new Date(dateOfBirth as string);
-  if (isNaN(parsedDob.getTime())) {
-    return NextResponse.json({ error: "Date de naissance invalide" }, { status: 400 });
-  }
-
   const user = await prisma.user.findUnique({ where: { id: session.user.id } });
   if (!user) {
     return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
   }
 
-  const data: Record<string, unknown> = {
-    name: (name as string).trim(),
-    dateOfBirth: parsedDob,
-    gender: (gender as string).trim(),
-    addressStreet: (addressStreet as string).trim(),
-    addressCity: (addressCity as string).trim(),
-    addressProvince: (addressProvince as string).trim(),
-    addressPostalCode: (addressPostalCode as string).trim(),
-    phone: (phone as string).trim(),
-    termsAcceptedAt: user.termsAcceptedAt ?? new Date(),
-    isBusiness: Boolean(isBusiness),
-    businessNumber: isBusiness ? (businessNumber?.trim() || null) : null,
-    website: website?.trim() || null,
-  };
+  // Mise a jour partielle : on ne touche que les champs effectivement fournis,
+  // pour permettre de sauvegarder un onglet (ex: preferences) sans devoir
+  // renvoyer tout le profil personnel a chaque fois.
+  const data: Record<string, unknown> = {};
+
+  if (name !== undefined) data.name = name.trim();
+  if (phone !== undefined) data.phone = phone.trim() || null;
+  if (gender !== undefined) data.gender = gender.trim() || null;
+  if (addressStreet !== undefined) data.addressStreet = addressStreet.trim() || null;
+  if (addressCity !== undefined) data.addressCity = addressCity.trim() || null;
+  if (addressProvince !== undefined) data.addressProvince = addressProvince.trim() || null;
+  if (addressPostalCode !== undefined) data.addressPostalCode = addressPostalCode.trim() || null;
+  if (website !== undefined) data.website = website.trim() || null;
+  if (notifyProductUpdates !== undefined) data.notifyProductUpdates = Boolean(notifyProductUpdates);
+  if (notifyBillingAlerts !== undefined) data.notifyBillingAlerts = Boolean(notifyBillingAlerts);
+
+  if (dateOfBirth !== undefined && dateOfBirth !== "") {
+    const parsedDob = new Date(dateOfBirth);
+    if (isNaN(parsedDob.getTime())) {
+      return NextResponse.json({ error: "Date de naissance invalide" }, { status: 400 });
+    }
+    data.dateOfBirth = parsedDob;
+  }
+
+  if (isBusiness !== undefined) {
+    data.isBusiness = Boolean(isBusiness);
+    data.businessNumber = isBusiness ? (businessNumber?.trim() || null) : null;
+    data.companyName = isBusiness ? (companyName?.trim() || null) : null;
+  }
+
+  if (acceptedTerms) {
+    data.termsAcceptedAt = user.termsAcceptedAt ?? new Date();
+  }
 
   if (newPassword) {
     if (!currentPassword) {
