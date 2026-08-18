@@ -19,21 +19,21 @@ export const LandingUI = () => {
 
       {/* BACKGROUND EFFECTS */}
       <div className="absolute inset-0 z-0">
-        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,_var(--tw-gradient-stops))] from-blue-900/10 via-transparent to-transparent opacity-50"></div>
+        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,_var(--tw-gradient-stops))] from-[#C9A227]/10 via-transparent to-transparent opacity-50"></div>
         <div className="h-full w-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.15] contrast-150 brightness-50"></div>
       </div>
 
       {/* HEADER / NAV */}
       <nav className="relative z-50 flex justify-between items-center p-8 backdrop-blur-sm bg-black/10">
         <div className="flex items-center gap-3 group cursor-pointer">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center font-black italic text-lg shadow-[0_0_20px_rgba(37,99,235,0.4)] group-hover:scale-110 transition-transform">Z</div>
-          <span className="text-xl font-bold tracking-[0.2em] uppercase">Zovo<span className="text-blue-500">.ca</span></span>
+          <div className="w-10 h-10 bg-[#C9A227] rounded-xl flex items-center justify-center font-black italic text-lg text-[#0A0A0C] shadow-[0_0_20px_rgba(201,162,39,0.4)] group-hover:scale-110 transition-transform">Z</div>
+          <span className="text-xl font-bold tracking-[0.2em] uppercase">Zovo<span className="text-[#C9A227]">.ca</span></span>
         </div>
         <div className="hidden md:flex gap-8 text-[10px] font-bold tracking-widest uppercase text-zinc-500 items-center">
-          <a href="#apropos" className="hover:text-blue-400 transition-colors">À Propos</a>
-          <a href="#produits" className="hover:text-blue-400 transition-colors">Produits</a>
-          <a href="#technologie" className="hover:text-blue-400 transition-colors">Technologie</a>
-          <a href="/login" className="px-4 py-1.5 rounded-full bg-blue-600 text-white hover:bg-blue-500 transition-colors normal-case tracking-normal">Connexion</a>
+          <a href="#apropos" className="hover:text-[#E8C34A] transition-colors">À Propos</a>
+          <a href="#produits" className="hover:text-[#E8C34A] transition-colors">Produits</a>
+          <a href="#technologie" className="hover:text-[#E8C34A] transition-colors">Technologie</a>
+          <a href="/login" className="px-4 py-1.5 rounded-full bg-[#C9A227] text-[#0A0A0C] hover:bg-[#E8C34A] transition-colors normal-case tracking-normal">Connexion</a>
         </div>
       </nav>
 
@@ -49,7 +49,7 @@ export const LandingUI = () => {
               animate={{ opacity: 1, y: 0 }}
               className="text-6xl md:text-8xl font-black tracking-tighter mb-4"
             >
-              L&apos;IA QUI <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-600 shadow-blue-500/20">BÂTIT</span>
+              L&apos;IA QUI <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#E8C34A] via-[#C9A227] to-[#8A6E1A] shadow-[#C9A227]/20">BÂTIT</span>
             </motion.h1>
             <motion.p
               initial={{ opacity: 0 }}
@@ -76,7 +76,7 @@ export const LandingUI = () => {
             </a>
             <a
               href="#apropos"
-              className="px-8 py-4 border border-white/15 rounded-2xl font-bold text-sm tracking-wide text-zinc-300 hover:text-white hover:border-blue-500 transition-all"
+              className="px-8 py-4 border border-white/15 rounded-2xl font-bold text-sm tracking-wide text-zinc-300 hover:text-white hover:border-[#C9A227] transition-all"
             >
               Découvrir ZOVO Dynamics
             </a>
@@ -89,7 +89,7 @@ export const LandingUI = () => {
           {...FADE_UP}
           className="w-full max-w-5xl py-24 border-t border-white/5"
         >
-          <div className="text-[10px] font-black text-blue-500 tracking-widest uppercase mb-4">Qui sommes-nous</div>
+          <div className="text-[10px] font-black text-[#C9A227] tracking-widest uppercase mb-4">Qui sommes-nous</div>
           <h2 className="text-3xl md:text-5xl font-black tracking-tighter mb-6 max-w-3xl">
             ZOVO Dynamics bâtit les outils qui transforment une idée en entreprise numérique.
           </h2>
@@ -107,7 +107,7 @@ export const LandingUI = () => {
               { label: 'Validation automatique du code livré', value: '100%' },
             ].map((stat) => (
               <div key={stat.label} className="p-6 bg-white/5 border border-white/10 rounded-2xl">
-                <div className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 mb-2">
+                <div className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#E8C34A] to-[#C9A227] mb-2">
                   {stat.value}
                 </div>
                 <div className="text-[10px] font-bold tracking-widest uppercase text-zinc-500">{stat.label}</div>
@@ -122,7 +122,7 @@ export const LandingUI = () => {
           {...FADE_UP}
           className="w-full max-w-5xl py-24 border-t border-white/5"
         >
-          <div className="text-[10px] font-black text-blue-500 tracking-widest uppercase mb-4">Notre technologie</div>
+          <div className="text-[10px] font-black text-[#C9A227] tracking-widest uppercase mb-4">Notre technologie</div>
           <h2 className="text-3xl md:text-5xl font-black tracking-tighter mb-12 max-w-3xl">
             Le moteur Genesis, de votre vision à votre application.
           </h2>
@@ -135,7 +135,7 @@ export const LandingUI = () => {
               { step: '04', title: 'Validation & livraison', desc: 'Compilation, correction automatique et aperçu instantané avant livraison.' },
             ].map((s) => (
               <div key={s.step} className="p-6 bg-white/5 border border-white/10 rounded-2xl">
-                <div className="text-xs font-black text-blue-500 mb-3">{s.step}</div>
+                <div className="text-xs font-black text-[#C9A227] mb-3">{s.step}</div>
                 <div className="font-bold mb-2">{s.title}</div>
                 <div className="text-sm text-zinc-500 leading-relaxed">{s.desc}</div>
               </div>
@@ -149,20 +149,20 @@ export const LandingUI = () => {
           {...FADE_UP}
           className="w-full max-w-5xl py-24 border-t border-white/5"
         >
-          <div className="text-[10px] font-black text-blue-500 tracking-widest uppercase mb-4">Nos produits</div>
+          <div className="text-[10px] font-black text-[#C9A227] tracking-widest uppercase mb-4">Nos produits</div>
           <h2 className="text-3xl md:text-5xl font-black tracking-tighter mb-12 max-w-3xl">
             Un écosystème pour bâtir et faire vivre votre projet.
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="p-8 bg-gradient-to-br from-blue-600/10 to-purple-600/10 border border-blue-500/20 rounded-2xl">
-              <div className="text-[10px] font-black text-blue-400 tracking-widest uppercase mb-3">Produit phare</div>
+            <div className="p-8 bg-gradient-to-br from-[#C9A227]/10 to-[#E8C34A]/10 border border-[#C9A227]/20 rounded-2xl">
+              <div className="text-[10px] font-black text-[#E8C34A] tracking-widest uppercase mb-3">Produit phare</div>
               <div className="text-2xl font-black mb-3">ZOVO Builder</div>
               <p className="text-sm text-zinc-400 leading-relaxed mb-6">
                 Le générateur d&apos;applications propulsé par Genesis : décrivez votre SaaS, votre site ou votre outil interne,
                 et recevez une base de code complète, testée et prête à déployer.
               </p>
-              <a href="/pricing" className="text-xs font-bold tracking-widest uppercase text-blue-400 hover:text-blue-300">
+              <a href="/pricing" className="text-xs font-bold tracking-widest uppercase text-[#E8C34A] hover:text-[#F5E3A1]">
                 Voir les forfaits →
               </a>
             </div>
@@ -198,7 +198,7 @@ export const LandingUI = () => {
       {/* FOOTER HUD */}
       <footer className="relative z-50 p-8 flex flex-col md:flex-row justify-between items-center border-t border-white/5 bg-black/20 gap-4">
         <div className="flex flex-col gap-1">
-          <div className="text-[10px] font-black text-blue-500 tracking-widest uppercase">Statut du Système</div>
+          <div className="text-[10px] font-black text-[#C9A227] tracking-widest uppercase">Statut du Système</div>
           <div className="text-xs text-zinc-400 font-mono">Genesis Core v2.4.0-stable // Neural Link Ready</div>
         </div>
         <div className="flex gap-8 text-[10px] font-bold text-zinc-600 tracking-widest uppercase items-center">
