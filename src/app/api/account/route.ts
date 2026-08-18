@@ -43,8 +43,10 @@ export async function GET() {
 
   const { accounts, ...rest } = user;
   const hasGithub = accounts.some((a) => a.provider === "github");
+  const hasGoogle = accounts.some((a) => a.provider === "google");
+  const hasApple = accounts.some((a) => a.provider === "apple");
 
-  return NextResponse.json({ user: { ...rest, hasGithub } });
+  return NextResponse.json({ user: { ...rest, hasGithub, hasGoogle, hasApple } });
 }
 
 export async function PATCH(req: NextRequest) {

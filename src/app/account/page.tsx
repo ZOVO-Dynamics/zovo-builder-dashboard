@@ -22,6 +22,8 @@ type Account = {
   notifyProductUpdates: boolean;
   notifyBillingAlerts: boolean;
   hasGithub: boolean;
+  hasGoogle: boolean;
+  hasApple: boolean;
 };
 
 type SubscriptionData = {
@@ -548,6 +550,41 @@ function SecurityTab({
             }`}
           >
             {account.hasGithub ? "Connecté" : "Non connecté"}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border border-zinc-700 bg-black/50 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <svg width="20" height="20" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.66-.22-2.45H12v4.64h6.47a5.53 5.53 0 0 1-2.4 3.63v3h3.88c2.27-2.09 3.57-5.17 3.57-8.82Z"/>
+              <path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.95-2.91l-3.88-3c-1.08.72-2.46 1.15-4.07 1.15-3.13 0-5.78-2.11-6.73-4.96H1.26v3.11A11.99 11.99 0 0 0 12 24Z"/>
+              <path fill="#FBBC05" d="M5.27 14.28A7.2 7.2 0 0 1 4.89 12c0-.79.14-1.56.38-2.28V6.61H1.26A11.99 11.99 0 0 0 0 12c0 1.94.46 3.77 1.26 5.39l4.01-3.11Z"/>
+              <path fill="#EA4335" d="M12 4.75c1.76 0 3.35.61 4.6 1.8l3.44-3.44C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.69 1.26 6.61l4.01 3.11C6.22 6.86 8.87 4.75 12 4.75Z"/>
+            </svg>
+            <span className="text-sm">Google</span>
+          </div>
+          <span
+            className={`text-xs font-medium ${
+              account.hasGoogle ? "text-emerald-400" : "text-zinc-500"
+            }`}
+          >
+            {account.hasGoogle ? "Connecté" : "Non connecté"}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border border-zinc-700 bg-black/50 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-zinc-300">
+              <path d="M16.36 1.34c.14 1.06-.29 2.11-.94 2.87-.68.79-1.79 1.4-2.87 1.32-.16-1.03.33-2.1.96-2.83.7-.81 1.9-1.42 2.85-1.36Zm2.83 6.6c-1.58-.09-2.92.9-3.68.9-.77 0-1.94-.86-3.2-.84-1.65.03-3.17.96-4.02 2.44-1.72 2.98-.44 7.4 1.23 9.82.82 1.19 1.79 2.52 3.07 2.47 1.23-.05 1.7-.79 3.19-.79 1.49 0 1.91.79 3.21.77 1.33-.02 2.17-1.2 2.98-2.4.94-1.36 1.32-2.68 1.34-2.75-.03-.01-2.58-.99-2.6-3.93-.03-2.46 2.01-3.64 2.1-3.7-1.15-1.7-2.94-1.9-3.57-1.94l-.05-.05Z"/>
+            </svg>
+            <span className="text-sm">Apple</span>
+          </div>
+          <span
+            className={`text-xs font-medium ${
+              account.hasApple ? "text-emerald-400" : "text-zinc-500"
+            }`}
+          >
+            {account.hasApple ? "Connecté" : "Non connecté"}
           </span>
         </div>
       </div>
