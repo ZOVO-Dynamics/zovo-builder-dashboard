@@ -50,25 +50,8 @@ export default function LoginPage() {
         &larr; Retour à l&apos;accueil
       </a>
 
-      {/* COLONNE GAUCHE - Marque & Visuels (au-dessus sur mobile) */}
-      <div className="relative z-10 w-full lg:w-1/2 flex flex-col items-center justify-center gap-8 px-6 py-20 lg:py-0 lg:min-h-screen">
-        <AmbientHalo className="w-[26rem] h-[26rem] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-        <div className="relative flex items-center justify-center w-full h-64">
-          <NeuralOrb status="idle" />
-        </div>
-        <h2 className="relative text-2xl md:text-3xl font-black tracking-tight text-center max-w-sm">
-          Bienvenue sur{" "}
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#F59E0B] via-[#D4AF37] to-[#B45309]">
-            ZOVO
-          </span>
-          .
-          <br />
-          Là où la vision se matérialise.
-        </h2>
-      </div>
-
-      {/* COLONNE DROITE - Formulaire */}
-      <div className="relative z-10 w-full lg:w-1/2 flex items-center justify-center px-6 py-16 lg:py-0 lg:min-h-screen lg:border-l lg:border-amber-500/10">
+      {/* COLONNE GAUCHE - Formulaire */}
+      <div className="relative z-10 w-full lg:w-1/2 flex items-center justify-center px-6 py-20 lg:py-0 lg:min-h-screen">
         <div className="w-full max-w-md">
           <form
             onSubmit={handleSubmit}
@@ -83,7 +66,25 @@ export default function LoginPage() {
               </span>
             </div>
 
-            <h1 className="text-2xl font-bold text-center">Connexion</h1>
+            <div className="text-center">
+              <p className="text-sm text-zinc-500">Bienvenue</p>
+              <h1 className="text-2xl font-bold">Connexion</h1>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => signIn("github", { callbackUrl: "/dashboard" })}
+              className="w-full flex items-center justify-center gap-2 rounded-lg bg-zinc-900 hover:text-amber-400 px-4 py-2.5 text-sm font-medium border border-zinc-700 hover:border-amber-500/30 transition-colors"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.1 3.29 9.42 7.86 10.96.57.1.78-.25.78-.55v-2.1c-3.2.7-3.87-1.36-3.87-1.36-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.17.08 1.78 1.2 1.78 1.2 1.03 1.78 2.72 1.26 3.38.97.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.2-3.08-.12-.29-.52-1.47.11-3.06 0 0 .97-.31 3.2 1.18a11.06 11.06 0 0 1 5.83 0c2.22-1.49 3.19-1.18 3.19-1.18.64 1.6.24 2.77.12 3.06.75.8 1.2 1.82 1.2 3.08 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.05.78 2.12v3.14c0 .3.2.66.79.55A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></svg>
+              Continuer avec GitHub
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-zinc-800" />
+              <span className="text-xs text-zinc-500">ou</span>
+              <div className="h-px flex-1 bg-zinc-800" />
+            </div>
 
             <input
               type="email"
@@ -115,32 +116,37 @@ export default function LoginPage() {
             </button>
 
             <p className="text-sm text-zinc-400 text-center">
-              Pas de compte ?{" "}
+              Pas encore de compte ?{" "}
               <a href="/signup" className="text-amber-400 hover:text-amber-300 transition-colors">
                 S&apos;inscrire
               </a>
             </p>
-
-            <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-zinc-800" />
-              <span className="text-xs text-zinc-500">ou</span>
-              <div className="h-px flex-1 bg-zinc-800" />
-            </div>
-
-            <button
-              type="button"
-              onClick={() => signIn("github", { callbackUrl: "/dashboard" })}
-              className="w-full flex items-center justify-center gap-2 rounded-lg bg-zinc-900 hover:text-amber-400 px-4 py-2.5 text-sm font-medium border border-zinc-700 hover:border-amber-500/30 transition-colors"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.1 3.29 9.42 7.86 10.96.57.1.78-.25.78-.55v-2.1c-3.2.7-3.87-1.36-3.87-1.36-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.17.08 1.78 1.2 1.78 1.2 1.03 1.78 2.72 1.26 3.38.97.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.2-3.08-.12-.29-.52-1.47.11-3.06 0 0 .97-.31 3.2 1.18a11.06 11.06 0 0 1 5.83 0c2.22-1.49 3.19-1.18 3.19-1.18.64 1.6.24 2.77.12 3.06.75.8 1.2 1.82 1.2 3.08 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.05.78 2.12v3.14c0 .3.2.66.79.55A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></svg>
-              Continuer avec GitHub
-            </button>
           </form>
 
           <p className="mt-4 text-center text-[10px] text-zinc-700">
             Version {APP_VERSION}
           </p>
         </div>
+      </div>
+
+      {/* COLONNE DROITE - Panneau visuel (masque sur mobile) */}
+      <div className="hidden lg:flex relative z-10 w-1/2 min-h-screen flex-col items-center justify-center gap-8 px-6 border-l border-amber-500/10">
+        <AmbientHalo className="w-[26rem] h-[26rem] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+        <div className="relative flex items-center justify-center w-full h-64">
+          <NeuralOrb status="idle" />
+        </div>
+        <h2 className="relative text-2xl md:text-3xl font-black tracking-tight text-center max-w-sm">
+          Bienvenue sur{" "}
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#F59E0B] via-[#D4AF37] to-[#B45309]">
+            ZOVO
+          </span>
+          .
+          <br />
+          Là où la vision se matérialise.
+        </h2>
+        <p className="relative text-xs font-bold tracking-widest uppercase text-zinc-500 text-center max-w-xs">
+          L&apos;IA qui bâtit vos applications
+        </p>
       </div>
     </div>
   );
