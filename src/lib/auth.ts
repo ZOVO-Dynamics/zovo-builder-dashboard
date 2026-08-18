@@ -3,6 +3,11 @@ import Credentials from "next-auth/providers/credentials";
 import GitHub from "next-auth/providers/github";
 import Google from "next-auth/providers/google";
 import Apple from "next-auth/providers/apple";
+import Facebook from "next-auth/providers/facebook";
+import Discord from "next-auth/providers/discord";
+import LinkedIn from "next-auth/providers/linkedin";
+import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
+import Twitter from "next-auth/providers/twitter";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
@@ -25,6 +30,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Apple({
       clientId: process.env.APPLE_CLIENT_ID,
       clientSecret: process.env.APPLE_CLIENT_SECRET,
+    }),
+    Facebook({
+      clientId: process.env.FACEBOOK_CLIENT_ID,
+      clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
+    }),
+    Discord({
+      clientId: process.env.DISCORD_CLIENT_ID,
+      clientSecret: process.env.DISCORD_CLIENT_SECRET,
+    }),
+    LinkedIn({
+      clientId: process.env.LINKEDIN_CLIENT_ID,
+      clientSecret: process.env.LINKEDIN_CLIENT_SECRET,
+    }),
+    MicrosoftEntraID({
+      clientId: process.env.MICROSOFT_CLIENT_ID,
+      clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
+    }),
+    Twitter({
+      clientId: process.env.TWITTER_CLIENT_ID,
+      clientSecret: process.env.TWITTER_CLIENT_SECRET,
     }),
     Credentials({
       credentials: {

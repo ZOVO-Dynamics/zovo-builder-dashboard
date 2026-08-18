@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AmbientParticles, AmbientHalo } from "../../components/genesis/AmbientBackground";
 import { NeuralOrb } from "../../components/genesis/NeuralOrb";
 import { APP_VERSION } from "../../lib/version";
+import { PRIMARY_SOCIAL_PROVIDERS, SECONDARY_SOCIAL_PROVIDERS } from "../../components/auth/SocialProviders";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -71,37 +72,32 @@ export default function LoginPage() {
               <h1 className="text-2xl font-bold">Connexion</h1>
             </div>
 
-            <button
-              type="button"
-              onClick={() => signIn("github", { callbackUrl: "/dashboard" })}
-              className="w-full flex items-center justify-center gap-2 rounded-lg bg-zinc-900 hover:text-amber-400 px-4 py-2.5 text-sm font-medium border border-zinc-700 hover:border-amber-500/30 transition-colors"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.1 3.29 9.42 7.86 10.96.57.1.78-.25.78-.55v-2.1c-3.2.7-3.87-1.36-3.87-1.36-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.17.08 1.78 1.2 1.78 1.2 1.03 1.78 2.72 1.26 3.38.97.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.2-3.08-.12-.29-.52-1.47.11-3.06 0 0 .97-.31 3.2 1.18a11.06 11.06 0 0 1 5.83 0c2.22-1.49 3.19-1.18 3.19-1.18.64 1.6.24 2.77.12 3.06.75.8 1.2 1.82 1.2 3.08 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.05.78 2.12v3.14c0 .3.2.66.79.55A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></svg>
-              Continuer avec GitHub
-            </button>
+            {PRIMARY_SOCIAL_PROVIDERS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => signIn(p.id, { callbackUrl: "/dashboard" })}
+                className="w-full flex items-center justify-center gap-2 rounded-lg bg-zinc-900 hover:text-amber-400 px-4 py-2.5 text-sm font-medium border border-zinc-700 hover:border-amber-500/30 transition-colors"
+              >
+                {p.icon}
+                Continuer avec {p.label}
+              </button>
+            ))}
 
-            <button
-              type="button"
-              onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
-              className="w-full flex items-center justify-center gap-2 rounded-lg bg-zinc-900 hover:text-amber-400 px-4 py-2.5 text-sm font-medium border border-zinc-700 hover:border-amber-500/30 transition-colors"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.66-.22-2.45H12v4.64h6.47a5.53 5.53 0 0 1-2.4 3.63v3h3.88c2.27-2.09 3.57-5.17 3.57-8.82Z"/>
-                <path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.95-2.91l-3.88-3c-1.08.72-2.46 1.15-4.07 1.15-3.13 0-5.78-2.11-6.73-4.96H1.26v3.11A11.99 11.99 0 0 0 12 24Z"/>
-                <path fill="#FBBC05" d="M5.27 14.28A7.2 7.2 0 0 1 4.89 12c0-.79.14-1.56.38-2.28V6.61H1.26A11.99 11.99 0 0 0 0 12c0 1.94.46 3.77 1.26 5.39l4.01-3.11Z"/>
-                <path fill="#EA4335" d="M12 4.75c1.76 0 3.35.61 4.6 1.8l3.44-3.44C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.69 1.26 6.61l4.01 3.11C6.22 6.86 8.87 4.75 12 4.75Z"/>
-              </svg>
-              Continuer avec Google
-            </button>
-
-            <button
-              type="button"
-              onClick={() => signIn("apple", { callbackUrl: "/dashboard" })}
-              className="w-full flex items-center justify-center gap-2 rounded-lg bg-zinc-900 hover:text-amber-400 px-4 py-2.5 text-sm font-medium border border-zinc-700 hover:border-amber-500/30 transition-colors"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16.36 1.34c.14 1.06-.29 2.11-.94 2.87-.68.79-1.79 1.4-2.87 1.32-.16-1.03.33-2.1.96-2.83.7-.81 1.9-1.42 2.85-1.36Zm2.83 6.6c-1.58-.09-2.92.9-3.68.9-.77 0-1.94-.86-3.2-.84-1.65.03-3.17.96-4.02 2.44-1.72 2.98-.44 7.4 1.23 9.82.82 1.19 1.79 2.52 3.07 2.47 1.23-.05 1.7-.79 3.19-.79 1.49 0 1.91.79 3.21.77 1.33-.02 2.17-1.2 2.98-2.4.94-1.36 1.32-2.68 1.34-2.75-.03-.01-2.58-.99-2.6-3.93-.03-2.46 2.01-3.64 2.1-3.7-1.15-1.7-2.94-1.9-3.57-1.94l-.05-.05Z"/></svg>
-              Continuer avec Apple
-            </button>
+            <div className="grid grid-cols-5 gap-2">
+              {SECONDARY_SOCIAL_PROVIDERS.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => signIn(p.id, { callbackUrl: "/dashboard" })}
+                  title={`Continuer avec ${p.label}`}
+                  aria-label={`Continuer avec ${p.label}`}
+                  className="flex items-center justify-center rounded-lg bg-zinc-900 p-2.5 border border-zinc-700 hover:border-amber-500/30 transition-colors"
+                >
+                  {p.icon}
+                </button>
+              ))}
+            </div>
 
             <div className="flex items-center gap-3">
               <div className="h-px flex-1 bg-zinc-800" />
