@@ -1,10 +1,44 @@
 import { motion } from 'framer-motion';
 
+const PARTICLES = [
+  { top: 'calc(50% + 44px)', left: 'calc(50% + 122px)', size: 4, duration: 3.2, delay: 0 },
+  { top: 'calc(50% + 128px)', left: 'calc(50% - 23px)', size: 3, duration: 3.8, delay: 0.4 },
+  { top: 'calc(50% + 48px)', left: 'calc(50% - 132px)', size: 3.5, duration: 4.2, delay: 0.9 },
+  { top: 'calc(50% - 84px)', left: 'calc(50% - 71px)', size: 2.5, duration: 3.5, delay: 1.3 },
+  { top: 'calc(50% - 130px)', left: 'calc(50% + 75px)', size: 3, duration: 4, delay: 0.6 },
+];
+
 export const NeuralOrb = ({ status }: { status: string }) => {
   return (
     <div className="relative flex items-center justify-center scale-125 md:scale-150">
       {/* Halo diffus d'arriere-plan (backlight) - saignement de lumiere dore chaud, detache le globe du fond noir */}
       <div className="absolute w-[26rem] h-[26rem] rounded-full blur-[160px] pointer-events-none" style={{ backgroundColor: 'rgba(245, 158, 11, 0.25)' }} />
+
+      {/* Particules dorees flottantes - energie et mouvement autour du globe */}
+      {PARTICLES.map((p, i) => (
+        <motion.div
+          key={i}
+          className="absolute rounded-full pointer-events-none"
+          style={{
+            top: p.top,
+            left: p.left,
+            width: p.size,
+            height: p.size,
+            backgroundColor: '#FCD34D',
+            boxShadow: '0 0 6px 1px rgba(252, 211, 77, 0.8)',
+          }}
+          animate={{
+            y: [0, -10, 0],
+            opacity: [0.3, 1, 0.3],
+          }}
+          transition={{
+            repeat: Infinity,
+            duration: p.duration,
+            delay: p.delay,
+            ease: 'easeInOut',
+          }}
+        />
+      ))}
 
       {/* Aura Massive */}
       <motion.div
