@@ -25,6 +25,11 @@ const SectionLabel = ({ children }: { children: React.ReactNode }) => (
   </div>
 );
 
+const scrollToSection = (id: string) => (event: React.MouseEvent<HTMLAnchorElement>) => {
+  event.preventDefault();
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+};
+
 export const LandingUI = () => {
   const { status } = useGenesis();
 
@@ -45,9 +50,9 @@ export const LandingUI = () => {
           <span className="text-xl font-bold tracking-[0.2em] uppercase">Zovo<span className="text-[#D4AF37]">.ca</span></span>
         </div>
         <div className="hidden md:flex gap-8 text-[10px] font-bold tracking-widest uppercase text-zinc-500 items-center">
-          <a href="#apropos" className="hover:text-[#F59E0B] transition-colors">À Propos</a>
-          <a href="#produits" className="hover:text-[#F59E0B] transition-colors">Produits</a>
-          <a href="#technologie" className="hover:text-[#F59E0B] transition-colors">Technologie</a>
+          <a href="#a-propos" onClick={scrollToSection('a-propos')} className="hover:text-[#F59E0B] transition-colors">À Propos</a>
+          <a href="#produits" onClick={scrollToSection('produits')} className="hover:text-[#F59E0B] transition-colors">Produits</a>
+          <a href="#technologie" onClick={scrollToSection('technologie')} className="hover:text-[#F59E0B] transition-colors">Technologie</a>
           <a href="/login" className="px-4 py-1.5 rounded-full bg-[#D4AF37] text-[#0A0A0A] hover:bg-[#F59E0B] transition-colors normal-case tracking-normal">Connexion</a>
         </div>
       </nav>
@@ -91,7 +96,8 @@ export const LandingUI = () => {
               Essayer ZOVO Builder →
             </a>
             <a
-              href="#apropos"
+              href="#a-propos"
+              onClick={scrollToSection('a-propos')}
               className="px-8 py-4 border border-white/15 rounded-2xl font-bold text-sm tracking-wide text-zinc-300 hover:text-white hover:border-[#D4AF37] transition-all"
             >
               Découvrir ZOVO Dynamics
@@ -101,7 +107,7 @@ export const LandingUI = () => {
 
         {/* QUI SOMMES-NOUS */}
         <motion.section
-          id="apropos"
+          id="a-propos"
           {...FADE_UP}
           className="w-full max-w-5xl py-24 border-t border-white/5"
         >
