@@ -22,6 +22,7 @@ model User {
   isAdmin       Boolean   @default(false)
   isBusiness     Boolean @default(false)
   businessNumber String?
+  companyName    String?
   website        String?
   dateOfBirth        DateTime?
   gender             String?
@@ -31,6 +32,11 @@ model User {
   addressPostalCode  String?
   phone              String?
   termsAcceptedAt    DateTime?
+
+  notifyProductUpdates Boolean @default(true)
+  notifyBillingAlerts  Boolean @default(true)
+
+  apiKeys ApiKey[]
 
   plan         Plan     @default(FREE)
   monthlyUsage Int      @default(0)
@@ -255,6 +261,21 @@ model UserEntitlement {
   updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String
+  keyPrefix  String
+  keyHash    String    @unique
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 enum CreditTransactionType {
