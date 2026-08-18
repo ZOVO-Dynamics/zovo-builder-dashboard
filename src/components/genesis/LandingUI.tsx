@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { NeuralOrb } from './NeuralOrb';
 import { AmbientParticles, AmbientHalo } from './AmbientBackground';
 import { useGenesis } from '../../hooks/useGenesis';
+import { APP_VERSION } from '../../lib/version';
 
 const FADE_UP = {
   initial: { opacity: 0, y: 24 },
@@ -227,6 +228,12 @@ export const LandingUI = () => {
         <div className="flex gap-8 text-[10px] font-bold text-zinc-600 tracking-widest uppercase items-center">
           <a href="/pricing" className="hover:text-zinc-400 transition-colors">Tarifs</a>
           <a href="/login" className="hover:text-zinc-400 transition-colors">Connexion</a>
+          <a
+            href="/changelog"
+            className="normal-case tracking-normal text-xs text-neutral-500 hover:text-amber-400 transition-colors"
+          >
+            v{APP_VERSION}
+          </a>
           <span className="text-zinc-800">© 2026 ZOVO DYNAMICS</span>
         </div>
       </footer>

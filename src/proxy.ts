@@ -11,6 +11,7 @@ const PUBLIC_ROUTES = [
   "/gate",
   "/terms",
   "/privacy",
+  "/changelog",
 ];
 
 const PUBLIC_API_PREFIXES = [
