@@ -11,6 +11,19 @@ const FADE_UP = {
   transition: { duration: 0.6, ease: 'easeOut' },
 } as const;
 
+const SectionBadge = () => (
+  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className="shrink-0" aria-hidden="true">
+    <path d="M12 2L14.2 9.8L22 12L14.2 14.2L12 22L9.8 14.2L2 12L9.8 9.8L12 2Z" fill="#D4AF37" />
+  </svg>
+);
+
+const SectionLabel = ({ children }: { children: React.ReactNode }) => (
+  <div className="flex items-center gap-2 mb-4">
+    <SectionBadge />
+    <div className="text-[10px] font-black text-[#D4AF37] tracking-widest uppercase">{children}</div>
+  </div>
+);
+
 export const LandingUI = () => {
   const { status } = useGenesis();
 
@@ -89,7 +102,7 @@ export const LandingUI = () => {
           {...FADE_UP}
           className="w-full max-w-5xl py-24 border-t border-white/5"
         >
-          <div className="text-[10px] font-black text-[#D4AF37] tracking-widest uppercase mb-4">Qui sommes-nous</div>
+          <SectionLabel>Qui sommes-nous</SectionLabel>
           <h2 className="text-3xl md:text-5xl font-black tracking-tighter mb-6 max-w-3xl">
             ZOVO Dynamics bâtit les outils qui transforment une idée en entreprise numérique.
           </h2>
@@ -106,7 +119,7 @@ export const LandingUI = () => {
               { label: 'Fournisseurs IA en redondance', value: '7' },
               { label: 'Validation automatique du code livré', value: '100%' },
             ].map((stat) => (
-              <div key={stat.label} className="p-6 bg-white/5 border border-white/10 rounded-2xl">
+              <div key={stat.label} className="p-6 bg-white/5 border border-amber-500/20 rounded-2xl transition-all duration-300 hover:border-amber-500/50 hover:shadow-[0_0_15px_rgba(245,158,11,0.15)]">
                 <div className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#F59E0B] to-[#D4AF37] mb-2">
                   {stat.value}
                 </div>
@@ -122,7 +135,7 @@ export const LandingUI = () => {
           {...FADE_UP}
           className="w-full max-w-5xl py-24 border-t border-white/5"
         >
-          <div className="text-[10px] font-black text-[#D4AF37] tracking-widest uppercase mb-4">Notre technologie</div>
+          <SectionLabel>Notre technologie</SectionLabel>
           <h2 className="text-3xl md:text-5xl font-black tracking-tighter mb-12 max-w-3xl">
             Le moteur Genesis, de votre vision à votre application.
           </h2>
@@ -134,7 +147,7 @@ export const LandingUI = () => {
               { step: '03', title: 'Le code s’écrit', desc: 'Chaque fichier est projeté et rédigé en temps réel, sous vos yeux.' },
               { step: '04', title: 'Validation & livraison', desc: 'Compilation, correction automatique et aperçu instantané avant livraison.' },
             ].map((s) => (
-              <div key={s.step} className="p-6 bg-white/5 border border-white/10 rounded-2xl">
+              <div key={s.step} className="p-6 bg-white/5 border border-amber-500/20 rounded-2xl transition-all duration-300 hover:border-amber-500/50 hover:shadow-[0_0_15px_rgba(245,158,11,0.15)]">
                 <div className="text-xs font-black text-[#D4AF37] mb-3">{s.step}</div>
                 <div className="font-bold mb-2">{s.title}</div>
                 <div className="text-sm text-zinc-500 leading-relaxed">{s.desc}</div>
@@ -149,7 +162,7 @@ export const LandingUI = () => {
           {...FADE_UP}
           className="w-full max-w-5xl py-24 border-t border-white/5"
         >
-          <div className="text-[10px] font-black text-[#D4AF37] tracking-widest uppercase mb-4">Nos produits</div>
+          <SectionLabel>Nos produits</SectionLabel>
           <h2 className="text-3xl md:text-5xl font-black tracking-tighter mb-12 max-w-3xl">
             Un écosystème pour bâtir et faire vivre votre projet.
           </h2>
