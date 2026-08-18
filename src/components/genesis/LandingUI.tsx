@@ -2,6 +2,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { NeuralOrb } from './NeuralOrb';
+import { AmbientParticles, AmbientHalo } from './AmbientBackground';
 import { useGenesis } from '../../hooks/useGenesis';
 
 const FADE_UP = {
@@ -35,6 +36,7 @@ export const LandingUI = () => {
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,_var(--tw-gradient-stops))] from-[#0A0A0A] via-transparent to-transparent opacity-70"></div>
         <div className="h-full w-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.15] contrast-150 brightness-50"></div>
       </div>
+      <AmbientParticles />
 
       {/* HEADER / NAV */}
       <nav className="relative z-50 flex justify-between items-center p-8 backdrop-blur-sm bg-black/10">
@@ -54,7 +56,8 @@ export const LandingUI = () => {
       <main className="relative z-10 flex-1 flex flex-col items-center px-6">
 
         {/* HERO */}
-        <div className="flex flex-col items-center justify-center w-full pt-10 pb-8">
+        <div className="relative flex flex-col items-center justify-center w-full pt-10 pb-8">
+          <AmbientHalo className="w-[28rem] h-[28rem] top-0 left-1/2 -translate-x-1/2" />
           {/* TITRE VIRAL */}
           <div className="text-center mb-4">
             <motion.h1
@@ -160,8 +163,9 @@ export const LandingUI = () => {
         <motion.section
           id="produits"
           {...FADE_UP}
-          className="w-full max-w-5xl py-24 border-t border-white/5"
+          className="relative w-full max-w-5xl py-24 border-t border-white/5"
         >
+          <AmbientHalo className="w-96 h-96 top-10 right-0" />
           <SectionLabel>Nos produits</SectionLabel>
           <h2 className="text-3xl md:text-5xl font-black tracking-tighter mb-12 max-w-3xl">
             Un écosystème pour bâtir et faire vivre votre projet.
