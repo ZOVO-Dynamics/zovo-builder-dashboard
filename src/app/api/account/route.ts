@@ -42,9 +42,9 @@ export async function GET() {
   }
 
   const { accounts, ...rest } = user;
-  const hasGithub = accounts.some((a) => a.provider === "github");
+  const connectedProviders = [...new Set(accounts.map((a) => a.provider))];
 
-  return NextResponse.json({ user: { ...rest, hasGithub } });
+  return NextResponse.json({ user: { ...rest, connectedProviders } });
 }
 
 export async function PATCH(req: NextRequest) {
