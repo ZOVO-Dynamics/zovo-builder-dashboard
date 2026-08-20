@@ -4,10 +4,17 @@
  * SubscriptionPlan / PlanPrice en base pour que /pricing, /checkout et
  * /billing fonctionnent immediatement.
  *
- * A executer TOI-MEME (jamais depuis la session Claude) avec les
- * variables d'environnement STRIPE_SECRET_KEY et DATABASE_URL definies:
+ * A executer TOI-MEME (jamais depuis la session Claude), soit en local
+ * avec les variables d'environnement STRIPE_SECRET_KEY et DATABASE_URL
+ * definies :
  *
  *   STRIPE_SECRET_KEY=sk_live_xxx DATABASE_URL=postgres://... node scripts/setup-stripe-plans.mjs
+ *
+ * ...soit via le workflow GitHub Actions "Setup Stripe Plans"
+ * (.github/workflows/setup-stripe-plans.yml, declenchement manuel
+ * workflow_dispatch) une fois les secrets STRIPE_SECRET_KEY et
+ * DATABASE_URL configures dans les secrets du repo/de l'environnement
+ * "production".
  *
  * Le script est idempotent : le relancer ne cree pas de doublons, il
  * reutilise le produit/prix Stripe existant s'il le retrouve via son
