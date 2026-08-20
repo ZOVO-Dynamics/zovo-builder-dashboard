@@ -178,23 +178,35 @@ export async function POST(req: NextRequest) {
         const creditsToAdd = session.metadata?.credits ? parseInt(session.metadata.credits, 10) : 0;
 
         if (userId && creditPackId && creditsToAdd > 0) {
-          const currentUser = await prisma.user.findUnique({ where: { id: userId } });
-          const currentBalance = currentUser?.creditsBalance ?? 0;
-          const newBalance = currentBalance + creditsToAdd;
+          const paymentIntentId = String(session.payment_intent || "") || null;
 
-          await prisma.creditTransaction.create({
-            data: {
-              userId,
-              type: "PURCHASE",
-              amount: creditsToAdd,
-              balanceAfter: newBalance,
-              stripePaymentIntentId: String(session.payment_intent || ""),
-            },
-          });
+          // Idempotence : un même paiement Stripe ne doit jamais créditer deux fois
+          // (re-livraison du webhook). stripePaymentIntentId est unique en base.
+          if (paymentIntentId) {
+            const existing = await prisma.creditTransaction.findUnique({
+              where: { stripePaymentIntentId: paymentIntentId },
+            });
+            if (existing) {
+              console.log(`[CreditTransaction: ${existing.id}] webhook re-livré, ignoré (idempotence)`);
+              break;
+            }
+          }
 
-          await prisma.user.update({
-            where: { id: userId },
-            data: { creditsBalance: newBalance },
+          await prisma.$transaction(async (tx) => {
+            const currentUser = await tx.user.update({
+              where: { id: userId },
+              data: { creditsBalance: { increment: creditsToAdd } },
+            });
+
+            await tx.creditTransaction.create({
+              data: {
+                userId,
+                type: "PURCHASE",
+                amount: creditsToAdd,
+                balanceAfter: currentUser.creditsBalance,
+                stripePaymentIntentId: paymentIntentId,
+              },
+            });
           });
 
           break;
@@ -335,6 +347,14 @@ export async function POST(req: NextRequest) {
             cancelAtPeriodEnd:
               subscription.cancel_at_period_end,
           },
+        });
+
+        // Révoque l'accès Pro dès que l'abonnement n'est plus actif/en essai
+        // (annulé, supprimé, impayé...). Repasse en FREE côté User.
+        const isStillEntitled = subscription.status === "active" || subscription.status === "trialing";
+        await prisma.user.update({
+          where: { id: userId },
+          data: { plan: isStillEntitled ? "PRO" : "FREE" },
         });
 
         break;
