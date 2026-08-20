@@ -1,0 +1,42 @@
+name: Setup Stripe Plans
+
+# Action manuelle uniquement — ne se déclenche jamais sur push/PR.
+# Recrée/synchronise les produits & prix Stripe (weekly_pro, monthly_pro)
+# et les tables SubscriptionPlan/PlanPrice en base. Voir scripts/setup-stripe-plans.mjs.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Tape exactement REACTIVATE pour confirmer (touche Stripe live + la base de prod)'
+        required: true
+
+jobs:
+  setup-stripe-plans:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Vérifie la confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "REACTIVATE" ]; then
+            echo "Confirmation invalide — le champ 'confirm' doit contenir exactement REACTIVATE."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Run setup-stripe-plans
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: node scripts/setup-stripe-plans.mjs
