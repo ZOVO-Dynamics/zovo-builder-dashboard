@@ -315,11 +315,11 @@ async function regenerateFile(
   // inexistant, route /api/auth/[...nextauth] inventee) au lieu d'utiliser
   // le systeme d'auth maison du projet, et/ou oublie que cookies() de
   // next/headers est asynchrone dans cette version de Next.js.
-  const nextAuthIssue = /next-auth|\[\.\.\.nextauth\]/i.test(errorSummary);
+  const nextAuthIssue = /next-auth|\[\.\.\.nextauth\]|@clerk|clerk\/nextjs|auth0|supabase.*auth|firebase.*auth/i.test(errorSummary);
   const cookiesAsyncIssue = /ReadonlyRequestCookies|Property 'get' does not exist on type 'Promise/i.test(errorSummary);
   const authRule =
     (nextAuthIssue
-      ? "\n- Erreur liee a next-auth detectee : ce projet n'utilise PAS next-auth (module absent, aucune route /api/auth/[...nextauth]). Retire tout import/usage de next-auth et remplace la verification de session par une lecture directe du cookie de session via cookies() de \"next/headers\"."
+      ? "\n- Erreur liee a un service d'authentification tiers detectee (next-auth, Clerk, Auth0, Supabase Auth, Firebase Auth...) : ce projet n'utilise AUCUN de ces services (modules absents, aucune route /api/auth/[...nextauth]). Retire tout import/usage de ces services et remplace la verification de session par une lecture directe du cookie de session via cookies() de \"next/headers\"."
       : "") +
     (cookiesAsyncIssue
       ? "\n- Erreur \"cookies() n'a pas de .get()\" detectee : cookies() de \"next/headers\" retourne une Promise dans cette version de Next.js. Utilise TOUJOURS : const cookieStore = await cookies(); avant d'appeler cookieStore.get(...)."
@@ -343,6 +343,20 @@ async function regenerateFile(
     ? "\n- Erreur liee a l'avatar utilisateur detectee : le champ s'appelle TOUJOURS user.avatar (jamais avatarUrl), et le type User est exporte par \"@/components/AuthProvider\" (import { type User } from \"@/components/AuthProvider\"). Le composant AvatarUpload.tsx accepte EXACTEMENT ces props : { userId: string; currentAvatarUrl?: string | null; onUploadSuccess?: (url: string) => void } — utilise ces noms exacts, aussi bien dans AvatarUpload.tsx lui-meme que dans tout fichier qui l'utilise."
     : "";
 
+  // Cas constate en pratique : le champ role (feature admin) n'existe pas
+  // sur le type User devine par l'IA lors de la reparation.
+  const roleIssue = /Property 'role' does not exist on type 'User'/i.test(errorSummary);
+  const roleRule = roleIssue
+    ? "\n- Erreur liee au role utilisateur detectee : le champ s'appelle TOUJOURS user.role (jamais isAdmin ni userRole), et fait partie du type User exporte par \"@/components/AuthProvider\" (import { type User } from \"@/components/AuthProvider\")."
+    : "";
+
+  // Cas constate en pratique : mauvais package Stripe (@stripe/react-stripe-js
+  // non declare), API redirectToCheckout obsolete, ou apiVersion mal formee.
+  const stripeIssue = /@stripe\/react-stripe-js|redirectToCheckout|is not assignable to type '"\d{4}-\d{2}-\d{2}\.\w+"'/i.test(errorSummary);
+  const stripeRule = stripeIssue
+    ? "\n- Erreur Stripe detectee : n'utilise QUE \"stripe\" (serveur) et \"@stripe/stripe-js\" (client) si presents dans les dependances declarees, jamais \"@stripe/react-stripe-js\". Ne passe JAMAIS d'option apiVersion a new Stripe(...) (laisse la valeur par defaut). Pour rediriger vers le paiement, cree une session cote serveur (route API qui retourne { url }) puis redirige avec window.location.href = url ; n'utilise JAMAIS stripe.redirectToCheckout (obsolete)."
+    : "";
+
   const codePrompt = `Tu es ZOVO Builder AI. Le fichier "${relativeFile}" contient des erreurs. Corrige-le.
 
 Contexte du projet original : ${originalPrompt}
@@ -359,7 +373,7 @@ Règles strictes :
 - Corrige les erreurs listées tout en gardant la logique et l'intention du fichier.
 - N'importe QUE des modules/exports qui existent réellement dans les fichiers réels listés ci-dessus (s'il y en a) ou dans les dépendances npm listées. N'invente JAMAIS un nouveau fichier, un nouveau module, ou un export absent.
 - Si tu as besoin d'une fonction utilitaire qui n'existe dans aucun fichier listé, écris-la directement DANS ce fichier plutôt que de l'importer d'un fichier qui n'existe pas.
-- Le code doit être valide et complet.${jsxRule}${authRule}${zodResolverRule}${avatarRule}`;
+- Le code doit être valide et complet.${jsxRule}${authRule}${zodResolverRule}${avatarRule}${roleRule}${stripeRule}`;
 
   let content = await callAiBridge(codePrompt);
   if (!content) return false;

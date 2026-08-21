@@ -18,7 +18,7 @@ export function runTypeCheck(projectDir: string): { ok: boolean; output: string 
 export function runNextBuild(projectDir: string): { ok: boolean; output: string } {
   try {
     execSync(
-      `docker run --rm --network=host -v "${projectDir}:/app" -w /app -e DATABASE_URL="${process.env.DATABASE_URL || ""}" node:22 npx prisma generate`,
+      `docker run --rm --network=host --user "$(id -u):$(id -g)" -v "${projectDir}:/app" -w /app -e DATABASE_URL="${process.env.DATABASE_URL || ""}" node:22 npx prisma generate`,
       { stdio: "pipe", timeout: 60000 }
     );
   } catch {

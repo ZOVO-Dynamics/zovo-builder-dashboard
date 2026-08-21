@@ -25,6 +25,14 @@ async function generateFileContent(
     ? `\n- Le composant src/components/AvatarUpload.tsx doit accepter EXACTEMENT ces props, ni plus ni moins : { userId: string; currentAvatarUrl?: string | null; onUploadSuccess?: (url: string) => void }. Tout fichier qui utilise <AvatarUpload /> doit lui passer EXACTEMENT ces props, avec ces noms exacts. Le champ avatar de l'utilisateur s'appelle TOUJOURS "avatar" (jamais "avatarUrl" ni "avatarURL") ; importe son type ainsi : import { useAuth, type User } from "@/components/AuthProvider"; puis utilise user.avatar (jamais user.avatarUrl).`
     : "";
 
+  const roleRule = blueprint.components.includes("AdminPanel") || blueprint.components.includes("UserTable")
+    ? `\n- Le rôle de l'utilisateur (admin ou non) s'appelle TOUJOURS user.role (jamais user.isAdmin ni user.userRole) ; il fait partie du type User exporté par "@/components/AuthProvider" (import { useAuth, type User } from "@/components/AuthProvider").`
+    : "";
+
+  const stripeRule = blueprint.components.includes("CheckoutForm") || blueprint.components.includes("PricingTable")
+    ? `\n- Pour Stripe, n'utilise QUE les packages "stripe" (côté serveur) et "@stripe/stripe-js" (côté client) s'ils sont dans la liste de dépendances ci-dessus ; n'importe JAMAIS "@stripe/react-stripe-js" ni aucun autre package Stripe sauf s'il apparaît explicitement dans cette liste. Ne passe JAMAIS d'option apiVersion à "new Stripe(...)" (laisse la valeur par défaut du SDK, pour éviter une incompatibilité de version). Pour rediriger vers le paiement, crée une session de paiement côté serveur (route API qui retourne { url }) puis redirige le navigateur avec window.location.href = url ; n'utilise JAMAIS stripe.redirectToCheckout (méthode obsolète, supprimée dans les versions récentes de @stripe/stripe-js).`
+    : "";
+
   const codePrompt = `Tu es ZOVO Builder AI. Génère UNIQUEMENT le code du fichier "${file}" pour un projet Next.js/TypeScript.
 
 Contexte du projet :
@@ -41,10 +49,11 @@ Règles strictes :
 - N'utilise QUE les packages npm suivants (en plus de next/react/typescript déjà fournis) : ${blueprint.dependencies.join(", ") || "aucun package supplémentaire"}. N'importe JAMAIS un autre package externe (pas de axios, next-auth, jsonwebtoken, nookies, react-hook-form, zod, etc. sauf s'ils apparaissent explicitement dans cette liste). Utilise fetch natif, useState/useContext, et les API natives du navigateur/Node à la place.
 - Si ce projet a de l'authentification (fichiers src/components/AuthProvider.tsx, LoginForm.tsx ou SignupForm.tsx présents dans le projet), ces 3 fichiers existent déjà et sont FIXES : n'en crée jamais de nouvelle version, n'importe JAMAIS de fichier situé à un autre chemin comme "../context/auth" ou "../contexts/AuthContext". Pour accéder à l'utilisateur connecté ou aux fonctions login/signup/logout, importe TOUJOURS exactement : import { useAuth } from "@/components/AuthProvider"; puis utilise const { user, loading, login, signup, logout } = useAuth();
 - Si ce fichier est une route API (chemin contenant "app/api" et nommé "route.ts"), utilise EXCLUSIVEMENT la syntaxe App Router de Next.js : export async function GET(request: Request) / POST(request: Request) / etc., et retourne toujours NextResponse.json(...). N'utilise JAMAIS NextApiRequest ni NextApiResponse (ancien Pages Router), ni req.method/req.url sur l'objet request.
-- Si ce fichier a besoin de vérifier la session de l'utilisateur côté serveur (route API protégée), n'utilise JAMAIS next-auth, getServerSession, ou une route "/api/auth/[...nextauth]" (qui n'existe pas dans ce projet) : lis directement le cookie de session avec l'API cookies() de "next/headers", qui est ASYNCHRONE dans cette version de Next.js et DOIT toujours être awaited : const cookieStore = await cookies(); const sessionToken = cookieStore.get("sessionToken")?.value; Utilise ensuite ce token pour retrouver l'utilisateur (via la base de données si Prisma est disponible), exactement comme le fait déjà src/lib/auth.ts pour la vérification côté client.
+- Si ce fichier a besoin de vérifier la session de l'utilisateur côté serveur (route API protégée), n'utilise JAMAIS de service d'authentification tiers (next-auth, getServerSession, Clerk, @clerk/nextjs, Auth0, Supabase Auth, Firebase Auth, etc. — aucun n'est configuré dans ce projet, aucune route "/api/auth/[...nextauth]" n'existe) : lis directement le cookie de session avec l'API cookies() de "next/headers", qui est ASYNCHRONE dans cette version de Next.js et DOIT toujours être awaited : const cookieStore = await cookies(); const sessionToken = cookieStore.get("sessionToken")?.value; Utilise ensuite ce token pour retrouver l'utilisateur (via la base de données si Prisma est disponible), exactement comme le fait déjà src/lib/auth.ts pour la vérification côté client.
+- Si ce fichier est prisma/schema.prisma et contient une relation entre deux modèles (ex: un champ de type Modele[] ou Modele?), déclare TOUJOURS le champ de relation opposé correspondant sur l'AUTRE modèle (avec @relation si plusieurs relations existent entre les deux mêmes modèles), sinon la validation du schéma échoue.
 - Pour la navigation programmatique, importe TOUJOURS useRouter/usePathname/useSearchParams depuis "next/navigation" (App Router). N'importe JAMAIS depuis "next/router" (ancien Pages Router, incompatible).
 - N'utilise JAMAIS directement les globals navigateur FileList, File, ou Blob dans un schéma de validation (ex: zod) évalué au niveau module, car ils causent un crash au prerendering serveur. Si nécessaire, garde-les avec typeof avant utilisation, ou valide côté client uniquement dans un handler d'événement.
-- Si tu utilises react-hook-form avec zodResolver (ex: pour un formulaire), et que le schéma zod a un champ avec .optional() ou .default(...), type TOUJOURS useForm avec z.input<typeof leSchema> (jamais z.infer ni z.output), sinon le type attendu par zodResolver ne correspondra pas au type du formulaire et provoquera une erreur de type. Exemple : const form = useForm<z.input<typeof itemSchema>>({ resolver: zodResolver(itemSchema), ... });${avatarRule}`;
+- Si tu utilises react-hook-form avec zodResolver (ex: pour un formulaire), et que le schéma zod a un champ avec .optional() ou .default(...), type TOUJOURS useForm avec z.input<typeof leSchema> (jamais z.infer ni z.output), sinon le type attendu par zodResolver ne correspondra pas au type du formulaire et provoquera une erreur de type. Exemple : const form = useForm<z.input<typeof itemSchema>>({ resolver: zodResolver(itemSchema), ... });${avatarRule}${roleRule}${stripeRule}`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 180000);
@@ -146,6 +155,7 @@ function fallbackContent(file: string, blueprint: BuildBlueprint): string {
   }
   if (file === "src/components/AuthProvider.tsx") {
     const hasAvatar = blueprint.components.includes("AvatarUpload") || blueprint.components.includes("ProfileForm");
+    const hasRole = blueprint.components.includes("AdminPanel") || blueprint.components.includes("UserTable");
     return `"use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
@@ -154,7 +164,7 @@ import { useRouter } from "next/navigation";
 export interface User {
   id: string;
   email: string;
-  name: string;${hasAvatar ? "\n  avatar: string | null;" : ""}
+  name: string;${hasAvatar ? "\n  avatar: string | null;" : ""}${hasRole ? "\n  role: string;" : ""}
 }
 
 interface AuthContextType {
