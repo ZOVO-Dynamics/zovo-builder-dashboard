@@ -302,6 +302,15 @@ async function regenerateFile(
   const errorSummary = errors.join("\n");
   const relatedContext = getRelatedFilesContext(projectDir, filePath);
 
+  // Cas frequent constate en pratique : l'IA laisse une balise JSX racine
+  // (souvent le <div> englobant du return()) sans fermeture correspondante.
+  // Une regle generique de correction suffit rarement a le lui faire
+  // remarquer ; on le pointe explicitement quand l'erreur le mentionne.
+  const jsxClosingTagIssue = /JSX closing tag/i.test(errorSummary);
+  const jsxRule = jsxClosingTagIssue
+    ? "\n- Erreur de balise JSX detectee : relis le return() en entier et verifie que CHAQUE balise ouverte (y compris la balise racine englobante) a bien sa balise fermante correspondante, dans le bon ordre d'imbrication, avant le `);` final."
+    : "";
+
   const codePrompt = `Tu es ZOVO Builder AI. Le fichier "${relativeFile}" contient des erreurs. Corrige-le.
 
 Contexte du projet original : ${originalPrompt}
@@ -318,7 +327,7 @@ Règles strictes :
 - Corrige les erreurs listées tout en gardant la logique et l'intention du fichier.
 - N'importe QUE des modules/exports qui existent réellement dans les fichiers réels listés ci-dessus (s'il y en a) ou dans les dépendances npm listées. N'invente JAMAIS un nouveau fichier, un nouveau module, ou un export absent.
 - Si tu as besoin d'une fonction utilitaire qui n'existe dans aucun fichier listé, écris-la directement DANS ce fichier plutôt que de l'importer d'un fichier qui n'existe pas.
-- Le code doit être valide et complet.`;
+- Le code doit être valide et complet.${jsxRule}`;
 
   let content = await callAiBridge(codePrompt);
   if (!content) return false;
