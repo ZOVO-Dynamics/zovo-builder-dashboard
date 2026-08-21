@@ -21,6 +21,10 @@ async function generateFileContent(
   blueprint: BuildBlueprint,
   originalPrompt: string
 ): Promise<{ content: string; usedFallback: boolean }> {
+  const avatarRule = blueprint.components.includes("AvatarUpload")
+    ? `\n- Le composant src/components/AvatarUpload.tsx doit accepter EXACTEMENT ces props, ni plus ni moins : { userId: string; currentAvatarUrl?: string | null; onUploadSuccess?: (url: string) => void }. Tout fichier qui utilise <AvatarUpload /> doit lui passer EXACTEMENT ces props, avec ces noms exacts. Le champ avatar de l'utilisateur s'appelle TOUJOURS "avatar" (jamais "avatarUrl" ni "avatarURL") ; importe son type ainsi : import { useAuth, type User } from "@/components/AuthProvider"; puis utilise user.avatar (jamais user.avatarUrl).`
+    : "";
+
   const codePrompt = `Tu es ZOVO Builder AI. Génère UNIQUEMENT le code du fichier "${file}" pour un projet Next.js/TypeScript.
 
 Contexte du projet :
@@ -40,7 +44,7 @@ Règles strictes :
 - Si ce fichier a besoin de vérifier la session de l'utilisateur côté serveur (route API protégée), n'utilise JAMAIS next-auth, getServerSession, ou une route "/api/auth/[...nextauth]" (qui n'existe pas dans ce projet) : lis directement le cookie de session avec l'API cookies() de "next/headers", qui est ASYNCHRONE dans cette version de Next.js et DOIT toujours être awaited : const cookieStore = await cookies(); const sessionToken = cookieStore.get("sessionToken")?.value; Utilise ensuite ce token pour retrouver l'utilisateur (via la base de données si Prisma est disponible), exactement comme le fait déjà src/lib/auth.ts pour la vérification côté client.
 - Pour la navigation programmatique, importe TOUJOURS useRouter/usePathname/useSearchParams depuis "next/navigation" (App Router). N'importe JAMAIS depuis "next/router" (ancien Pages Router, incompatible).
 - N'utilise JAMAIS directement les globals navigateur FileList, File, ou Blob dans un schéma de validation (ex: zod) évalué au niveau module, car ils causent un crash au prerendering serveur. Si nécessaire, garde-les avec typeof avant utilisation, ou valide côté client uniquement dans un handler d'événement.
-- Si tu utilises react-hook-form avec zodResolver (ex: pour un formulaire), et que le schéma zod a un champ avec .optional() ou .default(...), type TOUJOURS useForm avec z.input<typeof leSchema> (jamais z.infer ni z.output), sinon le type attendu par zodResolver ne correspondra pas au type du formulaire et provoquera une erreur de type. Exemple : const form = useForm<z.input<typeof itemSchema>>({ resolver: zodResolver(itemSchema), ... });`;
+- Si tu utilises react-hook-form avec zodResolver (ex: pour un formulaire), et que le schéma zod a un champ avec .optional() ou .default(...), type TOUJOURS useForm avec z.input<typeof leSchema> (jamais z.infer ni z.output), sinon le type attendu par zodResolver ne correspondra pas au type du formulaire et provoquera une erreur de type. Exemple : const form = useForm<z.input<typeof itemSchema>>({ resolver: zodResolver(itemSchema), ... });${avatarRule}`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 180000);
@@ -141,15 +145,16 @@ function fallbackContent(file: string, blueprint: BuildBlueprint): string {
     return `import type { Metadata } from "next";\nimport type { ReactNode } from "react";\n${authImport}\nexport const metadata: Metadata = {\n  title: "${blueprint.name}",\n  description: "Application générée par ZOVO Builder",\n};\n\nexport default function RootLayout({\n  children,\n}: {\n  children: ReactNode;\n}) {\n  return (\n    <html lang="fr">\n      <body>${bodyContent}</body>\n    </html>\n  );\n}\n`;
   }
   if (file === "src/components/AuthProvider.tsx") {
+    const hasAvatar = blueprint.components.includes("AvatarUpload") || blueprint.components.includes("ProfileForm");
     return `"use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-interface User {
+export interface User {
   id: string;
   email: string;
-  name: string;
+  name: string;${hasAvatar ? "\n  avatar: string | null;" : ""}
 }
 
 interface AuthContextType {
