@@ -284,7 +284,7 @@ async function callAiBridge(prompt: string): Promise<string | null> {
     });
     if (!response.ok) return null;
     const data = await response.json();
-    let content: string = data.response || "";
+    let content: string = typeof data.response === "string" ? data.response : "";
     content = content.replace(/^```[a-z]*\n?/i, "").replace(/```$/i, "").trim();
     return content || null;
   } catch {
@@ -1030,7 +1030,7 @@ ${pageContent.slice(0, 3000)}`;
     }
 
     const data = await response.json();
-    let raw = (data.response || "").trim();
+    let raw = (typeof data.response === "string" ? data.response : "").trim();
     raw = raw.replace(/^```json\n?/i, "").replace(/```$/i, "").trim();
     const parsed = JSON.parse(raw);
 

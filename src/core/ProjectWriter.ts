@@ -63,7 +63,7 @@ Règles strictes :
     }
 
     const data = await response.json();
-    let content: string = data.response || "";
+    let content: string = typeof data.response === "string" ? data.response : "";
 
     content = content.replace(/^```[a-z]*\n?/i, "").replace(/```$/i, "").trim();
 

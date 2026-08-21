@@ -94,7 +94,7 @@ Demande à analyser : "${prompt}"`;
       }
 
       const data = await response.json();
-      const text: string = data.response || "";
+      const text: string = typeof data.response === "string" ? data.response : "";
 
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
