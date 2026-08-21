@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AmbientParticles, AmbientHalo } from "@/components/genesis/AmbientBackground";
 
 export default function GatePage() {
   const [password, setPassword] = useState("");
@@ -30,9 +31,12 @@ export default function GatePage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0A0A0C] px-6">
-      <div className="w-full max-w-sm rounded-lg border border-[#2A2A2E] bg-[#16161A] p-8 text-center">
-        <h1 className="text-xl font-bold text-[#E8C34A]">ZOVO</h1>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-black px-6">
+      <AmbientParticles />
+      <AmbientHalo className="w-[30rem] h-[30rem] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+
+      <div className="relative z-10 w-full max-w-sm rounded-lg border border-[#2A2A2E] bg-[#16161A]/90 p-8 text-center backdrop-blur-sm">
+        <h1 className="text-xl font-bold text-[#E8C34A]">ZOVO Builder</h1>
         <p className="mt-2 text-sm text-[#9B9B95]">Site en construction. Accès réservé.</p>
 
         <input
