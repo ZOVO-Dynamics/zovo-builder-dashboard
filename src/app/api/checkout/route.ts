@@ -79,12 +79,6 @@ export async function POST(req: NextRequest) {
       customerId = customer.id;
     }
 
-    // Essai gratuit de 24h réservé aux utilisateurs n'ayant JAMAIS eu d'abonnement
-    const hasEverHadSubscription = await prisma.subscription.findFirst({
-      where: { userId: user.id },
-    });
-    const isEligibleForTrial = !hasEverHadSubscription;
-
     const checkoutSession = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: "subscription",
@@ -106,7 +100,6 @@ export async function POST(req: NextRequest) {
         billingInterval: planPrice.billingInterval,
       },
       subscription_data: {
-        ...(isEligibleForTrial ? { trial_period_days: 1 } : {}),
         metadata: {
           userId: user.id,
           planId: plan.id,
