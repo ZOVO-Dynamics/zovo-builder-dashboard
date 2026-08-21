@@ -325,6 +325,15 @@ async function regenerateFile(
       ? "\n- Erreur \"cookies() n'a pas de .get()\" detectee : cookies() de \"next/headers\" retourne une Promise dans cette version de Next.js. Utilise TOUJOURS : const cookieStore = await cookies(); avant d'appeler cookieStore.get(...)."
       : "");
 
+  // Cas frequent constate en pratique (100% des generations testees) :
+  // useForm typee avec z.infer/z.output d'un schema zod contenant des champs
+  // .optional()/.default(), incompatible avec le type d'entree attendu par
+  // zodResolver.
+  const zodResolverTypeIssue = /Resolver<.*is not assignable to type 'Resolver<|SubmitHandler<.*is not assignable to parameter of type 'SubmitHandler/i.test(errorSummary);
+  const zodResolverRule = zodResolverTypeIssue
+    ? "\n- Erreur de type entre zodResolver et useForm detectee : si le schema zod a un champ .optional() ou .default(...), type useForm avec z.input<typeof leSchema> (jamais z.infer ni z.output). Exemple : useForm<z.input<typeof itemSchema>>({ resolver: zodResolver(itemSchema), ... })."
+    : "";
+
   const codePrompt = `Tu es ZOVO Builder AI. Le fichier "${relativeFile}" contient des erreurs. Corrige-le.
 
 Contexte du projet original : ${originalPrompt}
@@ -341,7 +350,7 @@ Règles strictes :
 - Corrige les erreurs listées tout en gardant la logique et l'intention du fichier.
 - N'importe QUE des modules/exports qui existent réellement dans les fichiers réels listés ci-dessus (s'il y en a) ou dans les dépendances npm listées. N'invente JAMAIS un nouveau fichier, un nouveau module, ou un export absent.
 - Si tu as besoin d'une fonction utilitaire qui n'existe dans aucun fichier listé, écris-la directement DANS ce fichier plutôt que de l'importer d'un fichier qui n'existe pas.
-- Le code doit être valide et complet.${jsxRule}${authRule}`;
+- Le code doit être valide et complet.${jsxRule}${authRule}${zodResolverRule}`;
 
   let content = await callAiBridge(codePrompt);
   if (!content) return false;
