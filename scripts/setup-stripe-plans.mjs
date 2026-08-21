@@ -12,9 +12,12 @@
  *
  * ...soit via le workflow GitHub Actions "Setup Stripe Plans"
  * (.github/workflows/setup-stripe-plans.yml, declenchement manuel
- * workflow_dispatch) une fois les secrets STRIPE_SECRET_KEY et
- * DATABASE_URL configures dans les secrets du repo/de l'environnement
- * "production".
+ * workflow_dispatch), qui se connecte en SSH au serveur de prod
+ * (secrets EC2_HOST/EC2_USER/EC2_SSH_KEY, deja utilises par deploy.yml)
+ * et lance ce script la-bas. DATABASE_URL pointant vers un Postgres en
+ * localhost sur ce serveur, le script doit tourner sur la machine
+ * elle-meme — STRIPE_SECRET_KEY et DATABASE_URL restent dans le .env
+ * du serveur, jamais dans les secrets GitHub.
  *
  * Le script est idempotent : le relancer ne cree pas de doublons, il
  * reutilise le produit/prix Stripe existant s'il le retrouve via son

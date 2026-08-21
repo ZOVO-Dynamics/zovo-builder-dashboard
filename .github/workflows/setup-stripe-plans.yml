@@ -1,8 +1,15 @@
 name: Setup Stripe Plans
 
 # Action manuelle uniquement — ne se déclenche jamais sur push/PR.
-# Recrée/synchronise les produits & prix Stripe (weekly_pro, monthly_pro)
-# et les tables SubscriptionPlan/PlanPrice en base. Voir scripts/setup-stripe-plans.mjs.
+# Se connecte en SSH au serveur EC2 de prod (mêmes secrets que deploy.yml)
+# et y lance scripts/setup-stripe-plans.mjs, qui recree/synchronise les
+# produits & prix Stripe (weekly_pro, monthly_pro) et les tables
+# SubscriptionPlan/PlanPrice en base.
+#
+# Tourne sur le serveur plutot que sur un runner GitHub car DATABASE_URL
+# pointe vers un Postgres en localhost, accessible uniquement depuis le
+# serveur lui-meme. STRIPE_SECRET_KEY et DATABASE_URL restent dans le
+# .env du serveur, jamais dans les secrets GitHub.
 on:
   workflow_dispatch:
     inputs:
@@ -22,21 +29,15 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - name: Run setup-stripe-plans sur le serveur EC2
+        uses: appleboy/ssh-action@v1
         with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Generate Prisma client
-        run: npx prisma generate
-
-      - name: Run setup-stripe-plans
-        env:
-          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: node scripts/setup-stripe-plans.mjs
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/zovo-builder-dashboard
+            git pull origin main
+            npm ci
+            npx prisma generate
+            node scripts/setup-stripe-plans.mjs
