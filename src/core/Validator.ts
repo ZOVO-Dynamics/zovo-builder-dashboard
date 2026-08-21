@@ -352,9 +352,17 @@ async function regenerateFile(
 
   // Cas constate en pratique : mauvais package Stripe (@stripe/react-stripe-js
   // non declare), API redirectToCheckout obsolete, ou apiVersion mal formee.
-  const stripeIssue = /@stripe\/react-stripe-js|redirectToCheckout|is not assignable to type '"\d{4}-\d{2}-\d{2}\.\w+"'/i.test(errorSummary);
+  const stripeIssue = /@stripe\/react-stripe-js|redirectToCheckout|is not assignable to type '"\d{4}-\d{2}-\d{2}\.\w+"'|new Stripe\(/i.test(errorSummary);
   const stripeRule = stripeIssue
-    ? "\n- Erreur Stripe detectee : n'utilise QUE \"stripe\" (serveur) et \"@stripe/stripe-js\" (client) si presents dans les dependances declarees, jamais \"@stripe/react-stripe-js\". Ne passe JAMAIS d'option apiVersion a new Stripe(...) (laisse la valeur par defaut). Pour rediriger vers le paiement, cree une session cote serveur (route API qui retourne { url }) puis redirige avec window.location.href = url ; n'utilise JAMAIS stripe.redirectToCheckout (obsolete)."
+    ? "\n- Erreur Stripe detectee : n'utilise QUE \"stripe\" (serveur) et \"@stripe/stripe-js\" (client) si presents dans les dependances declarees, jamais \"@stripe/react-stripe-js\". N'instancie JAMAIS toi-meme new Stripe(...) dans ce fichier s'il n'est pas src/lib/stripe.ts : importe plutot import { stripe } from \"@/lib/stripe\"; Ne passe JAMAIS d'option apiVersion nulle part (laisse la valeur par defaut). Pour rediriger vers le paiement, cree une session cote serveur (route API qui retourne { url }) puis redirige avec window.location.href = url ; n'utilise JAMAIS stripe.redirectToCheckout (obsolete)."
+    : "";
+
+  // Cas constate en pratique : SearchBar/SearchResults recoivent des props
+  // differentes de ce qu'ils declarent, chaque fichier ayant devine sa
+  // propre forme sans visibilite sur les autres.
+  const searchIssue = /SearchResultsProps|SearchBarProps|Property 'searchQuery' does not exist|Property 'items' does not exist/i.test(errorSummary);
+  const searchRule = searchIssue
+    ? "\n- Erreur de props SearchBar/SearchResults detectee : SearchBar.tsx accepte EXACTEMENT { onSearch: (query: string) => void }. SearchResults.tsx accepte EXACTEMENT { query: string } et effectue lui-meme la recherche (fetch vers une route API) en fonction de cette query. Utilise ces noms exacts partout ou ces composants sont utilises."
     : "";
 
   const codePrompt = `Tu es ZOVO Builder AI. Le fichier "${relativeFile}" contient des erreurs. Corrige-le.
@@ -373,7 +381,7 @@ Règles strictes :
 - Corrige les erreurs listées tout en gardant la logique et l'intention du fichier.
 - N'importe QUE des modules/exports qui existent réellement dans les fichiers réels listés ci-dessus (s'il y en a) ou dans les dépendances npm listées. N'invente JAMAIS un nouveau fichier, un nouveau module, ou un export absent.
 - Si tu as besoin d'une fonction utilitaire qui n'existe dans aucun fichier listé, écris-la directement DANS ce fichier plutôt que de l'importer d'un fichier qui n'existe pas.
-- Le code doit être valide et complet.${jsxRule}${authRule}${zodResolverRule}${avatarRule}${roleRule}${stripeRule}`;
+- Le code doit être valide et complet.${jsxRule}${authRule}${zodResolverRule}${avatarRule}${roleRule}${stripeRule}${searchRule}`;
 
   let content = await callAiBridge(codePrompt);
   if (!content) return false;
