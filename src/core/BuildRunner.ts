@@ -26,7 +26,7 @@ export function runNextBuild(projectDir: string): { ok: boolean; output: string 
   }
   try {
     execSync(
-      `docker run --rm --network=host --memory=1g --memory-swap=1g --user "$(id -u):$(id -g)" -v "${projectDir}:/app" -w /app -e DATABASE_URL="${process.env.DATABASE_URL || ""}" node:22 npm run build`,
+      `docker run --rm --network=host --memory=2g --memory-swap=2g --user "$(id -u):$(id -g)" -v "${projectDir}:/app" -w /app -e DATABASE_URL="${process.env.DATABASE_URL || ""}" node:22 npm run build`,
       { stdio: "pipe", timeout: 180000 }
     );
     return { ok: true, output: "" };
