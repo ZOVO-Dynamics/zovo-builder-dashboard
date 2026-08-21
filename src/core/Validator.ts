@@ -311,6 +311,20 @@ async function regenerateFile(
     ? "\n- Erreur de balise JSX detectee : relis le return() en entier et verifie que CHAQUE balise ouverte (y compris la balise racine englobante) a bien sa balise fermante correspondante, dans le bon ordre d'imbrication, avant le `);` final."
     : "";
 
+  // Cas frequent constate en pratique : l'IA hallucine next-auth (module
+  // inexistant, route /api/auth/[...nextauth] inventee) au lieu d'utiliser
+  // le systeme d'auth maison du projet, et/ou oublie que cookies() de
+  // next/headers est asynchrone dans cette version de Next.js.
+  const nextAuthIssue = /next-auth|\[\.\.\.nextauth\]/i.test(errorSummary);
+  const cookiesAsyncIssue = /ReadonlyRequestCookies|Property 'get' does not exist on type 'Promise/i.test(errorSummary);
+  const authRule =
+    (nextAuthIssue
+      ? "\n- Erreur liee a next-auth detectee : ce projet n'utilise PAS next-auth (module absent, aucune route /api/auth/[...nextauth]). Retire tout import/usage de next-auth et remplace la verification de session par une lecture directe du cookie de session via cookies() de \"next/headers\"."
+      : "") +
+    (cookiesAsyncIssue
+      ? "\n- Erreur \"cookies() n'a pas de .get()\" detectee : cookies() de \"next/headers\" retourne une Promise dans cette version de Next.js. Utilise TOUJOURS : const cookieStore = await cookies(); avant d'appeler cookieStore.get(...)."
+      : "");
+
   const codePrompt = `Tu es ZOVO Builder AI. Le fichier "${relativeFile}" contient des erreurs. Corrige-le.
 
 Contexte du projet original : ${originalPrompt}
@@ -327,7 +341,7 @@ Règles strictes :
 - Corrige les erreurs listées tout en gardant la logique et l'intention du fichier.
 - N'importe QUE des modules/exports qui existent réellement dans les fichiers réels listés ci-dessus (s'il y en a) ou dans les dépendances npm listées. N'invente JAMAIS un nouveau fichier, un nouveau module, ou un export absent.
 - Si tu as besoin d'une fonction utilitaire qui n'existe dans aucun fichier listé, écris-la directement DANS ce fichier plutôt que de l'importer d'un fichier qui n'existe pas.
-- Le code doit être valide et complet.${jsxRule}`;
+- Le code doit être valide et complet.${jsxRule}${authRule}`;
 
   let content = await callAiBridge(codePrompt);
   if (!content) return false;
