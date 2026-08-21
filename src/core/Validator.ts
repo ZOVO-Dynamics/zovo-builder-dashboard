@@ -334,6 +334,15 @@ async function regenerateFile(
     ? "\n- Erreur de type entre zodResolver et useForm detectee : si le schema zod a un champ .optional() ou .default(...), type useForm avec z.input<typeof leSchema> (jamais z.infer ni z.output). Exemple : useForm<z.input<typeof itemSchema>>({ resolver: zodResolver(itemSchema), ... })."
     : "";
 
+  // Cas constate en pratique : le type User (exporte par AuthProvider.tsx)
+  // et les props d'AvatarUpload.tsx divergent d'un fichier a l'autre car
+  // chaque fichier est genere sans visibilite sur le contenu reel des
+  // autres au moment de sa premiere generation.
+  const avatarMismatchIssue = /Property 'avatar(Url)?' does not exist on type 'User'|AvatarUploadProps/i.test(errorSummary);
+  const avatarRule = avatarMismatchIssue
+    ? "\n- Erreur liee a l'avatar utilisateur detectee : le champ s'appelle TOUJOURS user.avatar (jamais avatarUrl), et le type User est exporte par \"@/components/AuthProvider\" (import { type User } from \"@/components/AuthProvider\"). Le composant AvatarUpload.tsx accepte EXACTEMENT ces props : { userId: string; currentAvatarUrl?: string | null; onUploadSuccess?: (url: string) => void } — utilise ces noms exacts, aussi bien dans AvatarUpload.tsx lui-meme que dans tout fichier qui l'utilise."
+    : "";
+
   const codePrompt = `Tu es ZOVO Builder AI. Le fichier "${relativeFile}" contient des erreurs. Corrige-le.
 
 Contexte du projet original : ${originalPrompt}
@@ -350,7 +359,7 @@ Règles strictes :
 - Corrige les erreurs listées tout en gardant la logique et l'intention du fichier.
 - N'importe QUE des modules/exports qui existent réellement dans les fichiers réels listés ci-dessus (s'il y en a) ou dans les dépendances npm listées. N'invente JAMAIS un nouveau fichier, un nouveau module, ou un export absent.
 - Si tu as besoin d'une fonction utilitaire qui n'existe dans aucun fichier listé, écris-la directement DANS ce fichier plutôt que de l'importer d'un fichier qui n'existe pas.
-- Le code doit être valide et complet.${jsxRule}${authRule}${zodResolverRule}`;
+- Le code doit être valide et complet.${jsxRule}${authRule}${zodResolverRule}${avatarRule}`;
 
   let content = await callAiBridge(codePrompt);
   if (!content) return false;
