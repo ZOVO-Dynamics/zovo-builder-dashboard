@@ -1,4 +1,4 @@
-import { createWorker } from "tesseract.js";
+import { createWorker, type Worker as TesseractWorker } from "tesseract.js";
 
 export interface OcrResult {
   rawText: string;
@@ -7,35 +7,53 @@ export interface OcrResult {
 
 /**
  * Sans ce delai, un chargement de modele Tesseract anormalement lent
- * (contention CPU, cache de langue absent) bloquait silencieusement la
- * requete jusqu'a ce que le proxy en amont (Cloudflare, ~100s) coupe la
- * connexion - constate en production sur /api/register. Le document est
- * alors simplement traite comme illisible par l'appelant, avec le message
- * clair deja existant, plutot que de laisser la requete pendre.
+ * (createWorker() en particulier - telechargement des donnees de langue,
+ * contention CPU) bloquait silencieusement la requete jusqu'a ce que le
+ * proxy en amont (Cloudflare, ~100s) coupe la connexion - constate en
+ * production sur /api/register. Le document est alors simplement traite
+ * comme illisible par l'appelant, avec le message clair deja existant,
+ * plutot que de laisser la requete pendre. Couvre createWorker() ET
+ * recognize() : un premier correctif qui n'entourait que recognize()
+ * n'a pas suffi, le blocage se produisait des la creation du worker.
  */
 const OCR_TIMEOUT_MS = 45000;
 
 /** Execution locale, WASM (tesseract.js) - aucune donnee envoyee a un service tiers. */
 export async function runOcr(buffer: Buffer, timeoutMs: number = OCR_TIMEOUT_MS): Promise<OcrResult> {
-  const worker = await createWorker("fra+eng");
   let timedOut = false;
+  const workerBox: { current: TesseractWorker | null } = { current: null };
+
+  const timeout = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      timedOut = true;
+      reject(new Error("OCR : délai dépassé"));
+    }, timeoutMs);
+  });
+
+  const workerCreation = createWorker("fra+eng").then((w) => {
+    workerBox.current = w;
+    return w;
+  });
+
+  const work = workerCreation
+    .then((w) => w.recognize(buffer))
+    .then(({ data }) => ({ rawText: data.text, confidence: data.confidence }));
+
   try {
-    const timeout = new Promise<never>((_, reject) => {
-      setTimeout(() => {
-        timedOut = true;
-        reject(new Error("OCR : délai dépassé"));
-      }, timeoutMs);
-    });
-    const { data } = await Promise.race([worker.recognize(buffer), timeout]);
-    return { rawText: data.text, confidence: data.confidence };
+    return await Promise.race([work, timeout]);
   } finally {
-    // En cas de timeout, le worker peut encore etre occupe par le job
-    // interne : on ne bloque pas la reponse dessus, on le termine en
-    // arriere-plan et on avale l'erreur (deja hors du chemin critique).
     if (timedOut) {
-      worker.terminate().catch(() => {});
+      // On ne bloque jamais la reponse (deja rejetee) sur la terminaison du
+      // worker : s'il existe deja (bloque dans recognize), on le termine
+      // tout de suite ; sinon (creation elle-meme encore en cours), on le
+      // termine des qu'il devient disponible, en arriere-plan.
+      if (workerBox.current) {
+        workerBox.current.terminate().catch(() => {});
+      } else {
+        workerCreation.then((w) => w.terminate().catch(() => {})).catch(() => {});
+      }
     } else {
-      await worker.terminate();
+      await workerBox.current!.terminate();
     }
   }
 }
