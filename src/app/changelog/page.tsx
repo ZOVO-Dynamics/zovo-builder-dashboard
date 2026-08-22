@@ -4,6 +4,14 @@ import { APP_VERSION } from '../../lib/version';
 const CHANGELOG = [
   {
     version: APP_VERSION,
+    title: 'Chaque mise à jour du code est désormais tracée',
+    items: [
+      'Nouveau garde-fou en intégration continue : toute modification de code doit incrémenter la version du site et ajouter une entrée à ce journal',
+      'Garantit que ce journal des mises à jour reste le reflet fidèle de chaque changement déployé',
+    ],
+  },
+  {
+    version: '0.1.1',
     title: 'Fiabilisation du vérificateur d’identité',
     items: [
       'Correction d’un plantage du pipeline de vérification sur les documents PDF valides',
