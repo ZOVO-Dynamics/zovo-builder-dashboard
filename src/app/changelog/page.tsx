@@ -4,6 +4,15 @@ import { APP_VERSION } from '../../lib/version';
 const CHANGELOG = [
   {
     version: APP_VERSION,
+    title: 'Fiabilisation du vérificateur d’identité',
+    items: [
+      'Correction d’un plantage du pipeline de vérification sur les documents PDF valides',
+      'Les formats de document non décodables sont désormais traités comme illisibles plutôt que de faire échouer la requête',
+      'Couverture de tests élargie sur les cas limites de documents invalides (falsification de type, taille, extension trompeuse)',
+    ],
+  },
+  {
+    version: '0.1.0',
     title: 'Refonte Noir & Or de la landing page',
     items: [
       'Nouvelle charte graphique Noir & Or sur toute la page d’accueil',
