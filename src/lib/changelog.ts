@@ -23,6 +23,13 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
+    version: "0.1.8",
+    title: "Le lien de version du footer renvoie de nouveau vers /changelog",
+    items: [
+      "Le lien « v{version} » du footer de la page d’accueil navigue à nouveau vers la page /changelog au lieu de défiler vers la section de la page d’accueil",
+    ],
+  },
+  {
     version: "0.1.7",
     title: "La page d’accueil n’affiche plus que les mises à jour récentes",
     items: [
