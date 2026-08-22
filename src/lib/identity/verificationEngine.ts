@@ -23,27 +23,45 @@ function isSuspectedFake(qualityScore: number, detectedType: DocumentType | null
   return qualityScore >= 70 && detectedType === null && ocrConfidence < 20;
 }
 
+const UNREADABLE_ANALYSIS: Omit<DocumentAnalysis, "qualityScore" | "dHash"> = {
+  detectedType: null,
+  documentStatus: "UNREADABLE",
+  expired: false,
+  ocrConfidence: 0,
+  pHash: "",
+  fields: {
+    firstName: null, lastName: null, fullName: null, dateOfBirth: null,
+    documentNumber: null, issuedDate: null, expirationDate: null,
+    countryCode: null, region: null,
+  },
+};
+
 async function analyzeDocument(buffer: Buffer, declaredType: DocumentType): Promise<DocumentAnalysis> {
-  const qualityScore = await analyzeImageQuality(buffer);
+  let qualityScore: number;
+  try {
+    qualityScore = await analyzeImageQuality(buffer);
+  } catch {
+    // Format non decodable par sharp (ex: PDF sur cette installation, image
+    // corrompue passee au travers de la verification des magic bytes) :
+    // traite comme illisible plutot que de faire planter tout le pipeline.
+    return { ...UNREADABLE_ANALYSIS, qualityScore: 0, dHash: "" };
+  }
 
   if (qualityScore < QUALITY_HARD_REJECT_THRESHOLD) {
     return {
-      detectedType: null,
-      documentStatus: "UNREADABLE",
-      expired: false,
+      ...UNREADABLE_ANALYSIS,
       qualityScore,
-      ocrConfidence: 0,
-      dHash: await computeDHash(buffer),
-      pHash: "",
-      fields: {
-        firstName: null, lastName: null, fullName: null, dateOfBirth: null,
-        documentNumber: null, issuedDate: null, expirationDate: null,
-        countryCode: null, region: null,
-      },
+      dHash: await computeDHash(buffer).catch(() => ""),
     };
   }
 
-  const [dHash, pHash, ocr] = await Promise.all([computeDHash(buffer), computePHash(buffer), runOcr(buffer)]);
+  let dHash: string, pHash: string, ocr: Awaited<ReturnType<typeof runOcr>>;
+  try {
+    [dHash, pHash, ocr] = await Promise.all([computeDHash(buffer), computePHash(buffer), runOcr(buffer)]);
+  } catch {
+    return { ...UNREADABLE_ANALYSIS, qualityScore, dHash: "" };
+  }
+
   const { type: detectedType } = detectDocumentType(ocr.rawText);
   const fields = parseDocumentFields(ocr.rawText);
 
