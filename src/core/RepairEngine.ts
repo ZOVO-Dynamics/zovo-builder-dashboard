@@ -168,6 +168,9 @@ export async function runRepairJob(jobId: string): Promise<RepairRunResult> {
     const fixedFilesSummary = summarizeActions(validation.fixedFiles, validation.valid);
 
     if (validation.valid) {
+      if (validation.runtimeIssues?.length) {
+        log(jobId, `Vérification runtime : ${validation.runtimeIssues.join(" | ")}`);
+      }
       safeRemove(backupDir);
       await prisma.repairJob.update({
         where: { id: jobId },

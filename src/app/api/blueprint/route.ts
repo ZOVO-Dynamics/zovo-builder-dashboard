@@ -156,7 +156,7 @@ async function runGenerationJob(
           projectPath,
           filesCreated,
           fallbackFiles,
-          degraded: fallbackFiles.length > 0 || hasHallucinations,
+          degraded: fallbackFiles.length > 0 || hasHallucinations || (validation.runtimeIssues?.length ?? 0) > 0,
           hallucinations,
           validation,
           historyId: historyEntry.id,

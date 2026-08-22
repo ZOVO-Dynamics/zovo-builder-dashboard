@@ -15,6 +15,15 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: APP_VERSION,
+    title: "Genesis vérifie maintenant que le code généré fonctionne réellement",
+    items: [
+      "Après un build réussi, Genesis démarre brièvement le projet généré (mode production) et interroge ses routes API pour détecter les plantages qu’un simple build ne révèle pas",
+      "Vérification explicite qu’une inscription via /api/auth/signup permet ensuite une connexion — détecte un compte qui « réussit » sans être réellement persisté",
+      "Les anomalies runtime marquent désormais la génération comme dégradée, visible dans le suivi de génération",
+    ],
+  },
+  {
+    version: "0.1.8",
     title: "Le lien de version du footer renvoie de nouveau vers /changelog",
     items: [
       "Le lien « v{version} » du footer de la page d’accueil navigue à nouveau vers la page /changelog au lieu de défiler vers la section de la page d’accueil",
