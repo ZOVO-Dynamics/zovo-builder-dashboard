@@ -15,6 +15,14 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: APP_VERSION,
+    title: "Correction d’un timeout d’inscription lors de l’envoi d’une pièce d’identité",
+    items: [
+      "L’analyse OCR du document d’identité pouvait, dans de rares cas, bloquer la requête d’inscription jusqu’à provoquer une erreur générique du proxy plutôt qu’un message clair",
+      "Un délai explicite fait désormais échouer proprement l’analyse (document traité comme illisible, avec le message existant) au lieu de laisser la requête en attente indéfiniment",
+    ],
+  },
+  {
+    version: "0.1.9",
     title: "Genesis vérifie maintenant que le code généré fonctionne réellement",
     items: [
       "Après un build réussi, Genesis démarre brièvement le projet généré (mode production) et interroge ses routes API pour détecter les plantages qu’un simple build ne révèle pas",
