@@ -7,6 +7,8 @@ import { useGenesis } from '../../hooks/useGenesis';
 import { APP_VERSION } from '../../lib/version';
 import { CHANGELOG } from '../../lib/changelog';
 
+const HOMEPAGE_CHANGELOG_LIMIT = 3;
+
 const FADE_UP = {
   initial: { opacity: 0, y: 24 },
   whileInView: { opacity: 1, y: 0 },
@@ -222,12 +224,18 @@ export const LandingUI = () => {
         {/* JOURNAL DES MISES A JOUR */}
         <motion.section id="changelog" {...FADE_UP} className="w-full max-w-5xl py-24 border-t border-white/5">
           <SectionLabel>Journal des mises à jour</SectionLabel>
-          <h2 className="text-3xl md:text-5xl font-black tracking-tighter mb-12 max-w-3xl">
+          <h2 className="text-3xl md:text-5xl font-black tracking-tighter mb-4 max-w-3xl">
             Chaque mise à jour, tracée et visible.
           </h2>
+          <p className="text-zinc-500 text-sm mb-12">
+            Les {HOMEPAGE_CHANGELOG_LIMIT} plus récentes évolutions.{' '}
+            <a href="/changelog" className="text-[#D4AF37] hover:text-[#F59E0B] transition-colors">
+              Voir tout l&apos;historique →
+            </a>
+          </p>
 
           <div className="space-y-6">
-            {CHANGELOG.map((entry) => (
+            {CHANGELOG.slice(0, HOMEPAGE_CHANGELOG_LIMIT).map((entry) => (
               <div
                 key={entry.version}
                 className="p-6 md:p-8 bg-white/5 border border-amber-500/20 rounded-2xl transition-all duration-300 hover:border-amber-500/40"

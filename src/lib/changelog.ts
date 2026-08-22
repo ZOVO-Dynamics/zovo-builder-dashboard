@@ -15,6 +15,14 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: APP_VERSION,
+    title: "La page d’accueil n’affiche plus que les mises à jour récentes",
+    items: [
+      "La section « Journal des mises à jour » de la page d’accueil se limite désormais aux 3 entrées les plus récentes",
+      "L’historique complet reste consultable sur /changelog, avec un lien « Voir tout l’historique » depuis la page d’accueil",
+    ],
+  },
+  {
+    version: "0.1.6",
     title: "Le lien de version du footer défile vers le journal au lieu de changer de page",
     items: [
       "Le lien « v{version} » du footer de la page d’accueil défile désormais vers la section « Journal des mises à jour » plutôt que de naviguer vers /changelog",
