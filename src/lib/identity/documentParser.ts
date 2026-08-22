@@ -75,31 +75,57 @@ function findLabeledDate(lines: string[], labels: string[]): Date | null {
   return null;
 }
 
+// Un vrai mot de nom (majuscules, 2+ lettres). Les artefacts OCR typiques
+// (bruit de capteur, compression) produisent des tokens courts ou en
+// minuscules qui n'ont aucune chance d'etre un vrai mot du nom imprime -
+// on les ignore plutot que de rejeter toute la ligne a cause d'eux.
+const NAME_WORD_PATTERN = /^[A-ZÀ-Ÿ][A-ZÀ-Ÿ'-]+$/;
+
+/**
+ * Nettoie une ligne bruitee par l'OCR en ne gardant que les tokens qui
+ * ressemblent a un vrai mot de nom, plutot que d'exiger que la ligne
+ * entiere soit parfaite. Ex: "~ JEAN DUPONT oe" -> "JEAN DUPONT" (le "~"
+ * et le "oe" isole en minuscules sont des artefacts, pas du texte reel).
+ */
+function extractNameWords(line: string): string[] {
+  return line
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((token) => NAME_WORD_PATTERN.test(token));
+}
+
 function parseName(text: string): { fullName: string | null; firstName: string | null; lastName: string | null } {
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
 
-  let best: string | null = null;
+  let best: string[] | null = null;
   let bestScore = 0;
 
   for (const line of lines) {
-    if (!/^[A-ZÀ-Ÿ\s'-]+$/.test(line)) continue;
-    const words = line.split(/\s+/).filter(Boolean);
+    const words = extractNameWords(line);
     if (words.length < 2 || words.length > 5) continue;
     if (words.some((w) => NAME_LABEL_WORDS.has(w))) continue;
 
-    if (line.length > bestScore) {
-      bestScore = line.length;
-      best = line;
+    // Une ligne majoritairement composee d'artefacts (peu de mots retenus
+    // par rapport au nombre de tokens bruts) est un signal trop faible -
+    // on exige qu'au moins la moitie des tokens de la ligne soient de
+    // vrais mots de nom pour eviter de piocher dans du bruit aleatoire.
+    const rawTokenCount = line.split(/\s+/).filter(Boolean).length;
+    if (words.length < rawTokenCount / 2) continue;
+
+    const score = words.join(" ").length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = words;
     }
   }
 
   if (!best) return { fullName: null, firstName: null, lastName: null };
 
-  const parts = best.split(/\s+/);
+  const fullName = best.join(" ");
   return {
-    fullName: best,
-    firstName: parts.length > 1 ? parts.slice(1).join(" ") : null,
-    lastName: parts[0],
+    fullName,
+    firstName: best.length > 1 ? best.slice(1).join(" ") : null,
+    lastName: best[0],
   };
 }
 
