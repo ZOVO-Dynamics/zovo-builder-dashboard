@@ -3,10 +3,53 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { Resend } from "resend";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
-import { validateDocumentFile } from "@/lib/identity-documents";
-import { runKycPipeline } from "@/lib/kyc/pipeline";
+import { validateUploadedFile } from "@/lib/identity/security/fileValidation";
+import { encryptDocument } from "@/lib/identity/security/encryption";
+import { runVerification } from "@/lib/identity/verificationEngine";
+import { logIdentityAuditEvent } from "@/lib/identity/identityAudit";
+import type { DocumentType } from "@/lib/identity/types";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+
+const VALID_DOCUMENT_TYPES: DocumentType[] = [
+  "DRIVERS_LICENSE",
+  "PASSPORT",
+  "GOVERNMENT_ID",
+  "HEALTH_INSURANCE_CARD",
+  "BIRTH_CERTIFICATE",
+];
+
+interface DocumentUpload {
+  type: DocumentType;
+  file: File;
+  buffer: Buffer;
+}
+
+async function readDocumentUpload(
+  form: FormData,
+  typeField: string,
+  fileField: string
+): Promise<{ upload: DocumentUpload | null; error: string | null }> {
+  const typeValue = form.get(typeField) as string | null;
+  const file = form.get(fileField) as File | null;
+
+  if (!typeValue && !file) return { upload: null, error: null };
+
+  if (!typeValue || !VALID_DOCUMENT_TYPES.includes(typeValue as DocumentType)) {
+    return { upload: null, error: "Type de document invalide" };
+  }
+  if (!file) {
+    return { upload: null, error: "Fichier manquant pour le document" };
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const validationError = validateUploadedFile({ file, buffer });
+  if (validationError) {
+    return { upload: null, error: validationError };
+  }
+
+  return { upload: { type: typeValue as DocumentType, file, buffer }, error: null };
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -29,8 +72,6 @@ export async function POST(req: NextRequest) {
     const companyName = form.get("companyName") as string | null;
     const website = form.get("website") as string | null;
     const acceptedTerms = form.get("acceptedTerms") === "true";
-    const driversLicense = form.get("driversLicense") as File | null;
-    const healthInsuranceCard = form.get("healthInsuranceCard") as File | null;
 
     if (!email || !password) {
       return NextResponse.json({ error: "Email et mot de passe requis" }, { status: 400 });
@@ -50,14 +91,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const driversLicenseError = validateDocumentFile(driversLicense);
-    if (driversLicenseError) {
-      return NextResponse.json({ error: `Permis de conduire : ${driversLicenseError}` }, { status: 400 });
+    const primary = await readDocumentUpload(form, "primaryDocumentType", "primaryDocument");
+    if (primary.error) {
+      return NextResponse.json({ error: primary.error }, { status: 400 });
+    }
+    if (!primary.upload) {
+      return NextResponse.json({ error: "Une pièce d'identité est requise" }, { status: 400 });
     }
 
-    const healthInsuranceCardError = validateDocumentFile(healthInsuranceCard);
-    if (healthInsuranceCardError) {
-      return NextResponse.json({ error: `Carte d'assurance maladie : ${healthInsuranceCardError}` }, { status: 400 });
+    const secondary = await readDocumentUpload(form, "secondaryDocumentType", "secondaryDocument");
+    if (secondary.error) {
+      return NextResponse.json({ error: secondary.error }, { status: 400 });
+    }
+    if (secondary.upload && secondary.upload.type === primary.upload.type) {
+      return NextResponse.json(
+        { error: "Le deuxième document doit être d'un type différent du premier" },
+        { status: 400 }
+      );
     }
 
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -65,24 +115,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Un compte existe déjà avec cet email" }, { status: 409 });
     }
 
-    const [driversLicenseBuffer, healthInsuranceCardBuffer] = await Promise.all([
-      driversLicense!.arrayBuffer(),
-      healthInsuranceCard!.arrayBuffer(),
-    ]);
-    const driversLicenseData = Buffer.from(driversLicenseBuffer);
-    const healthInsuranceCardData = Buffer.from(healthInsuranceCardBuffer);
+    const uploads = [primary.upload, ...(secondary.upload ? [secondary.upload] : [])];
 
-    const kyc = await runKycPipeline({
-      driversLicense: driversLicenseData,
-      healthInsuranceCard: healthInsuranceCardData,
+    const { result, documentAnalyses } = await runVerification({
+      documents: uploads.map((u) => ({ buffer: u.buffer, declaredType: u.type })),
       accountName: name,
+      accountDob: null,
     });
 
-    if (kyc.result.status === "REJECTED_QUALITY") {
+    // Un document illisible bloque l'inscription (rien n'est enregistre) -
+    // jamais l'expiration a elle seule.
+    const allUnreadable = documentAnalyses.every((a) => a.documentStatus === "UNREADABLE");
+    if (allUnreadable) {
       return NextResponse.json(
         {
           error:
-            "Un ou plusieurs documents sont illisibles (flou, mauvais éclairage). Réessaie avec des photos plus nettes.",
+            "Le document est illisible (flou, mauvais éclairage). Réessaie avec une photo plus nette.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // REJECTED : falsification suspectee ou informations incompatibles -
+    // pas simplement "document expire".
+    if (result.identityStatus === "REJECTED") {
+      return NextResponse.json(
+        {
+          error:
+            "Impossible de valider ce document. Vérifie que les informations sont lisibles et cohérentes, ou essaie un autre document.",
+          identityStatus: result.identityStatus,
         },
         { status: 400 }
       );
@@ -100,39 +161,45 @@ export async function POST(req: NextRequest) {
         website: website?.trim() || null,
         termsAcceptedAt: new Date(),
         identityDocuments: {
-          create: [
-            {
-              type: "DRIVERS_LICENSE",
-              fileName: driversLicense!.name,
-              mimeType: driversLicense!.type,
-              fileData: driversLicenseData,
-              dHash: kyc.driversLicenseAnalysis.dHash,
-              pHash: kyc.driversLicenseAnalysis.pHash,
-              extractedName: kyc.driversLicenseAnalysis.extractedName,
-              extractedDob: kyc.driversLicenseAnalysis.extractedDob,
-              qualityScore: kyc.driversLicenseAnalysis.qualityScore,
-            },
-            {
-              type: "HEALTH_INSURANCE_CARD",
-              fileName: healthInsuranceCard!.name,
-              mimeType: healthInsuranceCard!.type,
-              fileData: healthInsuranceCardData,
-              dHash: kyc.healthInsuranceCardAnalysis.dHash,
-              pHash: kyc.healthInsuranceCardAnalysis.pHash,
-              extractedName: kyc.healthInsuranceCardAnalysis.extractedName,
-              extractedDob: kyc.healthInsuranceCardAnalysis.extractedDob,
-              qualityScore: kyc.healthInsuranceCardAnalysis.qualityScore,
-            },
-          ],
+          create: uploads.map((u, i) => {
+            const analysis = documentAnalyses[i];
+            return {
+              type: u.type,
+              fileName: u.file.name,
+              mimeType: u.file.type,
+              fileData: encryptDocument(u.buffer) as never,
+              documentStatus: analysis.documentStatus,
+              expired: analysis.expired,
+              issuedDate: analysis.fields.issuedDate,
+              expirationDate: analysis.fields.expirationDate,
+              documentNumber: analysis.fields.documentNumber,
+              countryCode: analysis.fields.countryCode,
+              region: analysis.fields.region,
+              ocrConfidence: analysis.ocrConfidence,
+              dHash: analysis.dHash,
+              pHash: analysis.pHash,
+              extractedName: analysis.fields.fullName,
+              extractedDob: analysis.fields.dateOfBirth,
+              qualityScore: analysis.qualityScore,
+            };
+          }),
         },
         identityVerifications: {
           create: {
-            status: kyc.result.status,
-            riskScore: kyc.result.riskScore,
-            signals: kyc.result.signals as unknown as object,
+            identityStatus: result.identityStatus,
+            identityEvidenceScore: result.identityEvidenceScore,
+            expired: result.expired,
+            reviewRequired: result.reviewRequired,
+            signals: result.signals as unknown as object,
           },
         },
       },
+    });
+
+    await logIdentityAuditEvent(user.id, "VERIFICATION_COMPLETED", {
+      identityStatus: result.identityStatus,
+      identityEvidenceScore: result.identityEvidenceScore,
+      documentCount: uploads.length,
     });
 
     const { data, error } = await resend.emails.send({
@@ -148,7 +215,12 @@ export async function POST(req: NextRequest) {
       console.log("Email de bienvenue envoyé avec succès, ID:", data?.id);
     }
 
-    return NextResponse.json({ success: true, userId: user.id });
+    return NextResponse.json({
+      success: true,
+      userId: user.id,
+      identityStatus: result.identityStatus,
+      expired: result.expired,
+    });
   } catch (error: unknown) {
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : String(error) },

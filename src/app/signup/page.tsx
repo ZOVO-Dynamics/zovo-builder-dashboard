@@ -7,6 +7,16 @@ import { AmbientParticles, AmbientHalo } from "../../components/genesis/AmbientB
 import { NeuralOrb } from "../../components/genesis/NeuralOrb";
 import { PRIMARY_SOCIAL_PROVIDERS, SECONDARY_SOCIAL_PROVIDERS } from "../../components/auth/SocialProviders";
 
+const DOCUMENT_TYPE_OPTIONS = [
+  { value: "DRIVERS_LICENSE", label: "Permis de conduire" },
+  { value: "PASSPORT", label: "Passeport" },
+  { value: "GOVERNMENT_ID", label: "Carte d'identité gouvernementale" },
+  { value: "HEALTH_INSURANCE_CARD", label: "Carte d'assurance maladie" },
+  { value: "BIRTH_CERTIFICATE", label: "Certificat de naissance (complémentaire)" },
+];
+
+type SignupStep = "form" | "analyzing" | "expired-notice" | "done";
+
 export default function SignupPage() {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -16,8 +26,14 @@ export default function SignupPage() {
   const [companyName, setCompanyName] = useState("");
   const [website, setWebsite] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [driversLicense, setDriversLicense] = useState<File | null>(null);
-  const [healthInsuranceCard, setHealthInsuranceCard] = useState<File | null>(null);
+
+  const [primaryDocumentType, setPrimaryDocumentType] = useState("DRIVERS_LICENSE");
+  const [primaryDocument, setPrimaryDocument] = useState<File | null>(null);
+  const [showSecondary, setShowSecondary] = useState(false);
+  const [secondaryDocumentType, setSecondaryDocumentType] = useState("GOVERNMENT_ID");
+  const [secondaryDocument, setSecondaryDocument] = useState<File | null>(null);
+
+  const [step, setStep] = useState<SignupStep>("form");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -30,12 +46,13 @@ export default function SignupPage() {
       return;
     }
 
-    if (!driversLicense || !healthInsuranceCard) {
-      setError("Le permis de conduire et la carte d'assurance maladie sont requis (les documents expirés sont acceptés).");
+    if (!primaryDocument) {
+      setError("Une pièce d'identité est requise (les documents expirés sont acceptés).");
       return;
     }
 
     setLoading(true);
+    setStep("analyzing");
 
     const formData = new FormData();
     formData.append("name", name);
@@ -45,8 +62,12 @@ export default function SignupPage() {
     formData.append("companyName", companyName);
     formData.append("website", website);
     formData.append("acceptedTerms", String(acceptedTerms));
-    formData.append("driversLicense", driversLicense);
-    formData.append("healthInsuranceCard", healthInsuranceCard);
+    formData.append("primaryDocumentType", primaryDocumentType);
+    formData.append("primaryDocument", primaryDocument);
+    if (showSecondary && secondaryDocument) {
+      formData.append("secondaryDocumentType", secondaryDocumentType);
+      formData.append("secondaryDocument", secondaryDocument);
+    }
 
     const res = await fetch("/api/register", {
       method: "POST",
@@ -58,24 +79,57 @@ export default function SignupPage() {
     if (!res.ok) {
       setError(data.error || "Erreur lors de l'inscription");
       setLoading(false);
+      setStep("form");
       return;
     }
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    if (data.expired) {
+      setStep("expired-notice");
+      setLoading(false);
+      return;
+    }
 
+    await finishSignIn();
+  }
+
+  async function finishSignIn() {
+    setLoading(true);
+    const result = await signIn("credentials", { email, password, redirect: false });
     setLoading(false);
 
     if (result?.error) {
       setError("Compte créé, mais la connexion automatique a échoué. Essaie de te connecter.");
+      setStep("form");
       return;
     }
 
+    setStep("done");
     router.push("/");
     router.refresh();
+  }
+
+  if (step === "expired-notice") {
+    return (
+      <div className="relative flex min-h-screen items-center justify-center bg-black px-6 text-white">
+        <div className="w-full max-w-md rounded-2xl border border-amber-500/20 bg-neutral-900/60 p-8 text-center backdrop-blur-md">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10 text-2xl">
+            ⚠️
+          </div>
+          <h1 className="text-xl font-bold">Document expiré</h1>
+          <p className="mt-3 text-sm text-zinc-400">
+            Ce document est expiré. Il peut néanmoins être utilisé pour confirmer ton identité. Une vérification
+            supplémentaire peut être demandée.
+          </p>
+          <button
+            onClick={finishSignIn}
+            disabled={loading}
+            className="mt-6 w-full rounded-lg bg-gradient-to-r from-amber-400 to-amber-600 disabled:opacity-50 text-black font-semibold px-4 py-2.5 text-sm transition-all"
+          >
+            {loading ? "..." : "Continuer"}
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -96,7 +150,7 @@ export default function SignupPage() {
       <div className="relative z-10 w-full lg:w-1/2 flex flex-col items-center justify-center gap-8 px-6 py-20 lg:py-0 lg:min-h-screen">
         <AmbientHalo className="w-[26rem] h-[26rem] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
         <div className="relative flex items-center justify-center w-full h-64">
-          <NeuralOrb status="idle" />
+          <NeuralOrb status={step === "analyzing" ? "thinking" : "idle"} />
         </div>
         <h2 className="relative text-2xl md:text-3xl font-black tracking-tight text-center max-w-sm">
           Rejoins{" "}
@@ -126,6 +180,12 @@ export default function SignupPage() {
             </div>
 
             <h1 className="text-2xl font-bold text-center">Créer un compte</h1>
+
+            {step === "analyzing" && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-center text-sm text-amber-300">
+                Analyse automatique du document en cours...
+              </div>
+            )}
 
             <input
               type="text"
@@ -186,28 +246,64 @@ export default function SignupPage() {
 
             <div className="space-y-3 rounded-lg border border-amber-500/20 p-3">
               <p className="text-xs text-zinc-400">
-                Vérification d&apos;identité requise (les documents expirés sont acceptés) :
+                Étape 1 — Téléverse ta pièce d&apos;identité (les documents expirés sont acceptés) :
               </p>
+
               <div>
-                <label className="block text-xs text-zinc-500 mb-1">Permis de conduire</label>
+                <label className="block text-xs text-zinc-500 mb-1">Type de document</label>
+                <select
+                  value={primaryDocumentType}
+                  onChange={(e) => setPrimaryDocumentType(e.target.value)}
+                  className="w-full rounded-lg bg-black/50 border border-zinc-700 p-2.5 text-sm text-white focus:outline-none focus:border-amber-500"
+                >
+                  {DOCUMENT_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1">Photo du document</label>
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp,application/pdf"
-                  onChange={(e) => setDriversLicense(e.target.files?.[0] ?? null)}
+                  onChange={(e) => setPrimaryDocument(e.target.files?.[0] ?? null)}
                   className="w-full rounded-lg bg-black/50 border border-zinc-700 p-2 text-xs text-white file:mr-3 file:rounded-md file:border-0 file:bg-amber-500 file:px-3 file:py-1.5 file:text-black file:font-medium"
                   required
                 />
               </div>
-              <div>
-                <label className="block text-xs text-zinc-500 mb-1">Carte d&apos;assurance maladie</label>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,application/pdf"
-                  onChange={(e) => setHealthInsuranceCard(e.target.files?.[0] ?? null)}
-                  className="w-full rounded-lg bg-black/50 border border-zinc-700 p-2 text-xs text-white file:mr-3 file:rounded-md file:border-0 file:bg-amber-500 file:px-3 file:py-1.5 file:text-black file:font-medium"
-                  required
-                />
-              </div>
+
+              {!showSecondary ? (
+                <button
+                  type="button"
+                  onClick={() => setShowSecondary(true)}
+                  className="text-xs text-amber-400 hover:text-amber-300 transition-colors"
+                >
+                  + Ajouter un deuxième document (recommandé si le premier est expiré)
+                </button>
+              ) : (
+                <div className="space-y-3 border-t border-amber-500/10 pt-3">
+                  <p className="text-xs text-zinc-500">Document complémentaire (optionnel)</p>
+                  <select
+                    value={secondaryDocumentType}
+                    onChange={(e) => setSecondaryDocumentType(e.target.value)}
+                    className="w-full rounded-lg bg-black/50 border border-zinc-700 p-2.5 text-sm text-white focus:outline-none focus:border-amber-500"
+                  >
+                    {DOCUMENT_TYPE_OPTIONS.filter((opt) => opt.value !== primaryDocumentType).map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    onChange={(e) => setSecondaryDocument(e.target.files?.[0] ?? null)}
+                    className="w-full rounded-lg bg-black/50 border border-zinc-700 p-2 text-xs text-white file:mr-3 file:rounded-md file:border-0 file:bg-amber-500 file:px-3 file:py-1.5 file:text-black file:font-medium"
+                  />
+                </div>
+              )}
             </div>
 
             <label className="flex items-start gap-2 text-xs text-zinc-400">

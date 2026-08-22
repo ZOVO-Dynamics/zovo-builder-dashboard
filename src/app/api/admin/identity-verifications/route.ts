@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { listVerificationsForReview } from "@/lib/identity/reviewQueue";
+import type { IdentityStatus } from "@/lib/identity/types";
 
 interface SessionUserWithAdmin {
   isAdmin?: boolean;
@@ -14,29 +15,9 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const statusFilter = searchParams.get("status");
+  const statusFilter = searchParams.get("status") as IdentityStatus | null;
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
-  const pageSize = 20;
 
-  const where = statusFilter ? { status: statusFilter as "PASSED" | "FLAGGED" | "REJECTED_QUALITY" | "REJECTED_FRAUD" } : {};
-
-  const [verifications, total] = await Promise.all([
-    prisma.identityVerification.findMany({
-      where,
-      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      include: {
-        user: { select: { id: true, email: true, name: true, createdAt: true } },
-      },
-    }),
-    prisma.identityVerification.count({ where }),
-  ]);
-
-  return NextResponse.json({
-    verifications,
-    total,
-    page,
-    totalPages: Math.max(1, Math.ceil(total / pageSize)),
-  });
+  const data = await listVerificationsForReview(statusFilter, page);
+  return NextResponse.json(data);
 }

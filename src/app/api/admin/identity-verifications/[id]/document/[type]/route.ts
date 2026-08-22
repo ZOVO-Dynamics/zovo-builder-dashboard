@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { decryptDocument } from "@/lib/identity/security/encryption";
+import { verifyDocumentViewToken } from "@/lib/identity/security/signedUrl";
 
 interface SessionUserWithAdmin {
   isAdmin?: boolean;
 }
+
+const VALID_TYPES = ["DRIVERS_LICENSE", "PASSPORT", "GOVERNMENT_ID", "HEALTH_INSURANCE_CARD", "BIRTH_CERTIFICATE"];
 
 export async function GET(
   req: NextRequest,
@@ -18,8 +22,15 @@ export async function GET(
 
   const { id, type } = await params;
 
-  if (type !== "DRIVERS_LICENSE" && type !== "HEALTH_INSURANCE_CARD") {
+  if (!VALID_TYPES.includes(type)) {
     return NextResponse.json({ error: "Type de document invalide" }, { status: 400 });
+  }
+
+  // URL temporaire : un jeton signe, valide 5 minutes, est requis en plus
+  // de la session admin - genere via POST .../document-token.
+  const token = req.nextUrl.searchParams.get("token");
+  if (!token || !verifyDocumentViewToken(token, id, type)) {
+    return NextResponse.json({ error: "Lien expiré ou invalide - régénère un lien depuis le panneau admin" }, { status: 403 });
   }
 
   const verification = await prisma.identityVerification.findUnique({
@@ -31,13 +42,15 @@ export async function GET(
   }
 
   const document = await prisma.identityDocument.findUnique({
-    where: { userId_type: { userId: verification.userId, type } },
+    where: { userId_type: { userId: verification.userId, type: type as never } },
   });
-  if (!document) {
-    return NextResponse.json({ error: "Document introuvable" }, { status: 404 });
+  if (!document || document.fileData.length === 0) {
+    return NextResponse.json({ error: "Document introuvable ou purgé" }, { status: 404 });
   }
 
-  return new NextResponse(new Uint8Array(document.fileData), {
+  const decrypted = decryptDocument(Buffer.from(document.fileData));
+
+  return new NextResponse(new Uint8Array(decrypted), {
     headers: { "Content-Type": document.mimeType, "Cache-Control": "private, no-store" },
   });
 }

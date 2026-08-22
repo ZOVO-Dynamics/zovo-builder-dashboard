@@ -5,43 +5,52 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 
 interface Signal {
   type: string;
-  severity: number;
+  points: number;
   message: string;
 }
 
 interface Verification {
   id: string;
-  status: "PASSED" | "FLAGGED" | "REJECTED_QUALITY" | "REJECTED_FRAUD";
-  riskScore: number;
+  identityStatus: "VERIFIED" | "VERIFIED_EXPIRED_DOCUMENT" | "NEEDS_REVIEW" | "REJECTED";
+  identityEvidenceScore: number;
+  expired: boolean;
+  reviewRequired: boolean;
   signals: Signal[];
   createdAt: string;
   reviewedAt: string | null;
   user: { id: string; email: string; name: string | null; createdAt: string };
 }
 
-const STATUS_LABELS: Record<Verification["status"], string> = {
-  PASSED: "Passé",
-  FLAGGED: "Signalé",
-  REJECTED_QUALITY: "Qualité rejetée",
-  REJECTED_FRAUD: "Fraude confirmée",
+const STATUS_LABELS: Record<Verification["identityStatus"], string> = {
+  VERIFIED: "Vérifié",
+  VERIFIED_EXPIRED_DOCUMENT: "Vérifié (document expiré)",
+  NEEDS_REVIEW: "À réviser",
+  REJECTED: "Rejeté",
 };
 
-const STATUS_COLORS: Record<Verification["status"], string> = {
-  PASSED: "text-emerald-400 border-emerald-800/60 bg-emerald-950/40",
-  FLAGGED: "text-amber-400 border-amber-800/60 bg-amber-950/40",
-  REJECTED_QUALITY: "text-zinc-400 border-zinc-700 bg-zinc-900/40",
-  REJECTED_FRAUD: "text-red-400 border-red-800/60 bg-red-950/40",
+const STATUS_COLORS: Record<Verification["identityStatus"], string> = {
+  VERIFIED: "text-emerald-400 border-emerald-800/60 bg-emerald-950/40",
+  VERIFIED_EXPIRED_DOCUMENT: "text-amber-400 border-amber-800/60 bg-amber-950/40",
+  NEEDS_REVIEW: "text-amber-400 border-amber-800/60 bg-amber-950/40",
+  REJECTED: "text-red-400 border-red-800/60 bg-red-950/40",
 };
 
-function severityDot(severity: number): string {
-  if (severity >= 25) return "🔴";
-  if (severity >= 10) return "🟡";
-  return "🟢";
+const DOCUMENT_TYPE_LABELS: Record<string, string> = {
+  DRIVERS_LICENSE: "Permis de conduire",
+  PASSPORT: "Passeport",
+  GOVERNMENT_ID: "Carte d'identité gouvernementale",
+  HEALTH_INSURANCE_CARD: "Carte d'assurance maladie",
+  BIRTH_CERTIFICATE: "Certificat de naissance",
+};
+
+function signalDot(points: number): string {
+  if (points > 0) return "🟢";
+  return "🔴";
 }
 
 export default function AdminIdentityVerificationsPage() {
   const [verifications, setVerifications] = useState<Verification[]>([]);
-  const [statusFilter, setStatusFilter] = useState<string>("FLAGGED");
+  const [statusFilter, setStatusFilter] = useState<string>("NEEDS_REVIEW");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
@@ -62,7 +71,7 @@ export default function AdminIdentityVerificationsPage() {
     load();
   }, [load]);
 
-  async function decide(id: string, decision: "PASSED" | "REJECTED_FRAUD") {
+  async function decide(id: string, decision: "VERIFIED" | "REJECTED") {
     setActingId(id);
     try {
       const res = await fetch(`/api/admin/identity-verifications/${id}`, {
@@ -79,6 +88,24 @@ export default function AdminIdentityVerificationsPage() {
     }
   }
 
+  async function viewDocument(verificationId: string, documentType: string) {
+    try {
+      const res = await fetch(`/api/admin/identity-verifications/${verificationId}/document-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentType }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || "Erreur");
+      const { token } = await res.json();
+      window.open(
+        `/api/admin/identity-verifications/${verificationId}/document/${documentType}?token=${encodeURIComponent(token)}`,
+        "_blank"
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   return (
     <DashboardLayout>
       <div>
@@ -89,12 +116,13 @@ export default function AdminIdentityVerificationsPage() {
           Vérifications d&apos;identité
         </h1>
         <p className="mt-1 text-sm text-[#9B9B95]">
-          Statut, score de risque et signaux détectés automatiquement à l&apos;inscription.
+          Statut, preuve d&apos;identité et signaux détectés automatiquement. L&apos;expiration d&apos;un document
+          n&apos;empêche jamais une vérification positive.
         </p>
       </div>
 
-      <div className="mt-6 flex gap-2">
-        {(["FLAGGED", "PASSED", "REJECTED_QUALITY", "REJECTED_FRAUD", ""] as const).map((s) => (
+      <div className="mt-6 flex flex-wrap gap-2">
+        {(["NEEDS_REVIEW", "VERIFIED", "VERIFIED_EXPIRED_DOCUMENT", "REJECTED", ""] as const).map((s) => (
           <button
             key={s || "ALL"}
             onClick={() => setStatusFilter(s)}
@@ -131,10 +159,11 @@ export default function AdminIdentityVerificationsPage() {
                   <p className="text-xs text-[#6B6560]">
                     Compte créé le {new Date(v.user.createdAt).toLocaleDateString("fr-CA")} · Vérifié le{" "}
                     {new Date(v.createdAt).toLocaleString("fr-CA")}
+                    {v.expired && " · document expiré"}
                   </p>
                 </div>
-                <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${STATUS_COLORS[v.status]}`}>
-                  Risque : {v.riskScore}/100 — {STATUS_LABELS[v.status]}
+                <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${STATUS_COLORS[v.identityStatus]}`}>
+                  Preuve : {v.identityEvidenceScore}/100 — {STATUS_LABELS[v.identityStatus]}
                 </span>
               </div>
 
@@ -142,48 +171,42 @@ export default function AdminIdentityVerificationsPage() {
                 <ul className="space-y-1 text-sm text-[#D8CBA3]">
                   {v.signals.map((s, i) => (
                     <li key={i}>
-                      {severityDot(s.severity)} {s.message}
+                      {signalDot(s.points)} {s.message}
+                      {s.points > 0 && <span className="text-[#6B6560]"> (+{s.points})</span>}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-[#9B9B95]">🟢 Aucun signal détecté</p>
+                <p className="text-sm text-[#9B9B95]">Aucun signal enregistré</p>
               )}
 
               <div className="flex flex-wrap gap-2 pt-1">
-                <a
-                  href={`/api/admin/identity-verifications/${v.id}/document/DRIVERS_LICENSE`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-md border border-[#2A2A2E] px-3 py-1.5 text-xs text-[#9B9B95] hover:border-[#C9A227]/30 hover:text-[#F5F1E8]"
-                >
-                  Voir le permis de conduire
-                </a>
-                <a
-                  href={`/api/admin/identity-verifications/${v.id}/document/HEALTH_INSURANCE_CARD`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-md border border-[#2A2A2E] px-3 py-1.5 text-xs text-[#9B9B95] hover:border-[#C9A227]/30 hover:text-[#F5F1E8]"
-                >
-                  Voir la carte d&apos;assurance maladie
-                </a>
-
-                {v.status !== "PASSED" && (
+                {Object.entries(DOCUMENT_TYPE_LABELS).map(([type, label]) => (
                   <button
-                    onClick={() => decide(v.id, "PASSED")}
+                    key={type}
+                    onClick={() => viewDocument(v.id, type)}
+                    className="rounded-md border border-[#2A2A2E] px-3 py-1.5 text-xs text-[#9B9B95] hover:border-[#C9A227]/30 hover:text-[#F5F1E8]"
+                  >
+                    Voir : {label}
+                  </button>
+                ))}
+
+                {v.identityStatus !== "VERIFIED" && (
+                  <button
+                    onClick={() => decide(v.id, "VERIFIED")}
                     disabled={actingId === v.id}
                     className="rounded-md bg-emerald-600/20 border border-emerald-800/60 px-3 py-1.5 text-xs font-medium text-emerald-400 hover:bg-emerald-600/30 disabled:opacity-50"
                   >
                     Approuver
                   </button>
                 )}
-                {v.status !== "REJECTED_FRAUD" && (
+                {v.identityStatus !== "REJECTED" && (
                   <button
-                    onClick={() => decide(v.id, "REJECTED_FRAUD")}
+                    onClick={() => decide(v.id, "REJECTED")}
                     disabled={actingId === v.id}
                     className="rounded-md bg-red-600/20 border border-red-800/60 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-600/30 disabled:opacity-50"
                   >
-                    Confirmer fraude
+                    Rejeter
                   </button>
                 )}
               </div>

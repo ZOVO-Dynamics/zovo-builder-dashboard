@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { logIdentityAuditEvent } from "@/lib/identity/identityAudit";
 
 interface SessionUserWithAdmin {
   isAdmin?: boolean;
 }
 
-const ALLOWED_DECISIONS = ["PASSED", "REJECTED_FRAUD"] as const;
+const ALLOWED_DECISIONS = ["VERIFIED", "REJECTED"] as const;
 
 export async function PATCH(
   req: NextRequest,
@@ -22,7 +23,7 @@ export async function PATCH(
   const { decision } = await req.json().catch(() => ({}));
 
   if (!ALLOWED_DECISIONS.includes(decision)) {
-    return NextResponse.json({ error: "Décision invalide (PASSED ou REJECTED_FRAUD)" }, { status: 400 });
+    return NextResponse.json({ error: "Décision invalide (VERIFIED ou REJECTED)" }, { status: 400 });
   }
 
   const verification = await prisma.identityVerification.findUnique({ where: { id } });
@@ -33,10 +34,17 @@ export async function PATCH(
   const updated = await prisma.identityVerification.update({
     where: { id },
     data: {
-      status: decision,
+      identityStatus: decision,
+      reviewRequired: false,
       reviewedByUserId: session.user.id,
       reviewedAt: new Date(),
     },
+  });
+
+  await logIdentityAuditEvent(verification.userId, "ADMIN_DECISION", {
+    verificationId: id,
+    decision,
+    reviewedBy: session.user.id,
   });
 
   return NextResponse.json({ success: true, verification: updated });
