@@ -8,6 +8,7 @@ import fs from "fs";
 import * as ts from "typescript";
 import path from "path";
 import { fixDirectives } from "./DirectiveFixer";
+import { runRuntimeSmokeTest } from "./RuntimeSmokeTest";
 
 const AI_BRIDGE_URL = process.env.AI_BRIDGE_URL || "https://ai.zovo.ca/api/generate";
 
@@ -16,6 +17,13 @@ export interface ValidationResult {
   errors: string[];
   fixedFiles: string[];
   attempts?: number;
+  /**
+   * Signaux d'une verification runtime post-build (le serveur genere a ete
+   * demarre et interroge) - absent si aucun probleme detecte. Un build
+   * reussi (`valid: true`) n'implique donc plus que le projet fonctionne
+   * reellement : verifier ce champ avant de le considerer sans reserve.
+   */
+  runtimeIssues?: string[];
 }
 
 function installDependencies(projectDir: string): boolean {
@@ -816,7 +824,15 @@ export class Validator {
       if (ok) {
         const buildResult = runNextBuild(projectDir);
         if (buildResult.ok) {
-          return { valid: true, errors: [], fixedFiles, attempts: attempt };
+          const projectId = path.basename(projectDir);
+          const smokeTest = await runRuntimeSmokeTest(projectDir, projectId);
+          return {
+            valid: true,
+            errors: [],
+            fixedFiles,
+            attempts: attempt,
+            runtimeIssues: smokeTest.issues.length > 0 ? smokeTest.issues : undefined,
+          };
         }
 
         const buildFileErrors = extractBuildFileErrors(buildResult.output);
