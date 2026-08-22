@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Resend } from "resend";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
 import { validateDocumentFile } from "@/lib/identity-documents";
+import { runKycPipeline } from "@/lib/kyc/pipeline";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -64,12 +65,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Un compte existe déjà avec cet email" }, { status: 409 });
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
-
     const [driversLicenseBuffer, healthInsuranceCardBuffer] = await Promise.all([
       driversLicense!.arrayBuffer(),
       healthInsuranceCard!.arrayBuffer(),
     ]);
+    const driversLicenseData = Buffer.from(driversLicenseBuffer);
+    const healthInsuranceCardData = Buffer.from(healthInsuranceCardBuffer);
+
+    const kyc = await runKycPipeline({
+      driversLicense: driversLicenseData,
+      healthInsuranceCard: healthInsuranceCardData,
+      accountName: name,
+    });
+
+    if (kyc.result.status === "REJECTED_QUALITY") {
+      return NextResponse.json(
+        {
+          error:
+            "Un ou plusieurs documents sont illisibles (flou, mauvais éclairage). Réessaie avec des photos plus nettes.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
 
     const user = await prisma.user.create({
       data: {
@@ -86,15 +105,32 @@ export async function POST(req: NextRequest) {
               type: "DRIVERS_LICENSE",
               fileName: driversLicense!.name,
               mimeType: driversLicense!.type,
-              fileData: Buffer.from(driversLicenseBuffer),
+              fileData: driversLicenseData,
+              dHash: kyc.driversLicenseAnalysis.dHash,
+              pHash: kyc.driversLicenseAnalysis.pHash,
+              extractedName: kyc.driversLicenseAnalysis.extractedName,
+              extractedDob: kyc.driversLicenseAnalysis.extractedDob,
+              qualityScore: kyc.driversLicenseAnalysis.qualityScore,
             },
             {
               type: "HEALTH_INSURANCE_CARD",
               fileName: healthInsuranceCard!.name,
               mimeType: healthInsuranceCard!.type,
-              fileData: Buffer.from(healthInsuranceCardBuffer),
+              fileData: healthInsuranceCardData,
+              dHash: kyc.healthInsuranceCardAnalysis.dHash,
+              pHash: kyc.healthInsuranceCardAnalysis.pHash,
+              extractedName: kyc.healthInsuranceCardAnalysis.extractedName,
+              extractedDob: kyc.healthInsuranceCardAnalysis.extractedDob,
+              qualityScore: kyc.healthInsuranceCardAnalysis.qualityScore,
             },
           ],
+        },
+        identityVerifications: {
+          create: {
+            status: kyc.result.status,
+            riskScore: kyc.result.riskScore,
+            signals: kyc.result.signals as unknown as object,
+          },
         },
       },
     });
