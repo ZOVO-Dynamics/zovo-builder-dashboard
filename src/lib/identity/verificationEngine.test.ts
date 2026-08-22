@@ -82,4 +82,18 @@ describe("runVerification - integration OCR/hash reels", () => {
     expect(result.signals.some((s) => s.type === "DUPLICATE_DOCUMENT")).toBe(true);
     expect(result.reviewRequired).toBe(true);
   }, 15000);
+
+  it("format non decodable par sharp (ex: PDF valide sur cette installation) -> UNREADABLE au lieu de faire planter le pipeline", async () => {
+    const pdfBuffer = Buffer.from("%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<< /Type /Catalog >>\nendobj\n", "binary");
+
+    const { result, documentAnalyses } = await runVerification({
+      documents: [{ buffer: pdfBuffer, declaredType: "PASSPORT" }],
+      accountName: "Jean Dupont",
+      accountDob: null,
+    });
+
+    expect(documentAnalyses[0].documentStatus).toBe("UNREADABLE");
+    expect(result.identityStatus).toBe("REJECTED");
+    expect(result.reviewRequired).toBe(true);
+  }, 15000);
 });
