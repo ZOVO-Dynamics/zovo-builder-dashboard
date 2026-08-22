@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { Resend } from "resend";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
+import { validateDocumentFile } from "@/lib/identity-documents";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -18,8 +19,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { email, password, name, isBusiness, companyName, website, acceptedTerms } =
-      await req.json();
+    const form = await req.formData();
+
+    const email = form.get("email") as string | null;
+    const password = form.get("password") as string | null;
+    const name = form.get("name") as string | null;
+    const isBusiness = form.get("isBusiness") === "true";
+    const companyName = form.get("companyName") as string | null;
+    const website = form.get("website") as string | null;
+    const acceptedTerms = form.get("acceptedTerms") === "true";
+    const driversLicense = form.get("driversLicense") as File | null;
+    const healthInsuranceCard = form.get("healthInsuranceCard") as File | null;
 
     if (!email || !password) {
       return NextResponse.json({ error: "Email et mot de passe requis" }, { status: 400 });
@@ -39,12 +49,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const driversLicenseError = validateDocumentFile(driversLicense);
+    if (driversLicenseError) {
+      return NextResponse.json({ error: `Permis de conduire : ${driversLicenseError}` }, { status: 400 });
+    }
+
+    const healthInsuranceCardError = validateDocumentFile(healthInsuranceCard);
+    if (healthInsuranceCardError) {
+      return NextResponse.json({ error: `Carte d'assurance maladie : ${healthInsuranceCardError}` }, { status: 400 });
+    }
+
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       return NextResponse.json({ error: "Un compte existe déjà avec cet email" }, { status: 409 });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
+
+    const [driversLicenseBuffer, healthInsuranceCardBuffer] = await Promise.all([
+      driversLicense!.arrayBuffer(),
+      healthInsuranceCard!.arrayBuffer(),
+    ]);
 
     const user = await prisma.user.create({
       data: {
@@ -55,6 +80,22 @@ export async function POST(req: NextRequest) {
         companyName: isBusiness ? (companyName?.trim() || null) : null,
         website: website?.trim() || null,
         termsAcceptedAt: new Date(),
+        identityDocuments: {
+          create: [
+            {
+              type: "DRIVERS_LICENSE",
+              fileName: driversLicense!.name,
+              mimeType: driversLicense!.type,
+              fileData: Buffer.from(driversLicenseBuffer),
+            },
+            {
+              type: "HEALTH_INSURANCE_CARD",
+              fileName: healthInsuranceCard!.name,
+              mimeType: healthInsuranceCard!.type,
+              fileData: Buffer.from(healthInsuranceCardBuffer),
+            },
+          ],
+        },
       },
     });
 

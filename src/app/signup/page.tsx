@@ -16,6 +16,8 @@ export default function SignupPage() {
   const [companyName, setCompanyName] = useState("");
   const [website, setWebsite] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [driversLicense, setDriversLicense] = useState<File | null>(null);
+  const [healthInsuranceCard, setHealthInsuranceCard] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -28,20 +30,27 @@ export default function SignupPage() {
       return;
     }
 
+    if (!driversLicense || !healthInsuranceCard) {
+      setError("Le permis de conduire et la carte d'assurance maladie sont requis (les documents expirés sont acceptés).");
+      return;
+    }
+
     setLoading(true);
+
+    const formData = new FormData();
+    formData.append("name", name);
+    formData.append("email", email);
+    formData.append("password", password);
+    formData.append("isBusiness", String(isBusiness));
+    formData.append("companyName", companyName);
+    formData.append("website", website);
+    formData.append("acceptedTerms", String(acceptedTerms));
+    formData.append("driversLicense", driversLicense);
+    formData.append("healthInsuranceCard", healthInsuranceCard);
 
     const res = await fetch("/api/register", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        email,
-        password,
-        isBusiness,
-        companyName,
-        website,
-        acceptedTerms,
-      }),
+      body: formData,
     });
 
     const data = await res.json();
@@ -174,6 +183,32 @@ export default function SignupPage() {
                 />
               </div>
             )}
+
+            <div className="space-y-3 rounded-lg border border-amber-500/20 p-3">
+              <p className="text-xs text-zinc-400">
+                Vérification d&apos;identité requise (les documents expirés sont acceptés) :
+              </p>
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1">Permis de conduire</label>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  onChange={(e) => setDriversLicense(e.target.files?.[0] ?? null)}
+                  className="w-full rounded-lg bg-black/50 border border-zinc-700 p-2 text-xs text-white file:mr-3 file:rounded-md file:border-0 file:bg-amber-500 file:px-3 file:py-1.5 file:text-black file:font-medium"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1">Carte d&apos;assurance maladie</label>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  onChange={(e) => setHealthInsuranceCard(e.target.files?.[0] ?? null)}
+                  className="w-full rounded-lg bg-black/50 border border-zinc-700 p-2 text-xs text-white file:mr-3 file:rounded-md file:border-0 file:bg-amber-500 file:px-3 file:py-1.5 file:text-black file:font-medium"
+                  required
+                />
+              </div>
+            </div>
 
             <label className="flex items-start gap-2 text-xs text-zinc-400">
               <input

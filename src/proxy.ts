@@ -30,8 +30,11 @@ const GATE_EXEMPT_PATHS = ["/gate",
 
 const MARKETPLACE_GATE_PATHS = ["/marketplace", "/marketplace/agency-offers"];
 
+const IDENTITY_GATE_EXEMPT_PATHS = ["/complete-profile", "/api/identity-documents"];
+
 interface SessionUserWithAdmin {
   isAdmin?: boolean;
+  identityVerified?: boolean;
 }
 
 export default auth((req) => {
@@ -69,6 +72,12 @@ export default auth((req) => {
     return Response.redirect(
       new URL("/login", req.url)
     );
+  }
+
+  const isIdentityGateExempt = IDENTITY_GATE_EXEMPT_PATHS.some((p) => pathname.startsWith(p));
+
+  if (!isIdentityGateExempt && !(req.auth.user as SessionUserWithAdmin)?.identityVerified) {
+    return Response.redirect(new URL("/complete-profile", req.url));
   }
 
   const isAdminRoute = pathname.startsWith("/admin") || pathname.startsWith("/api/admin");
