@@ -9,6 +9,7 @@ const PUBLIC_ROUTES = [
   "/login",
   "/signup",
   "/gate",
+  "/marketplace-gate",
   "/terms",
   "/privacy",
   "/changelog",
@@ -20,11 +21,14 @@ const PUBLIC_API_PREFIXES = [
   "/api/webhooks",
   "/api/plans",
   "/api/gate",
+  "/api/marketplace-gate",
 ];
 
 const GATE_EXEMPT_PATHS = ["/gate",
   "/terms",
   "/privacy", "/api/gate"];
+
+const MARKETPLACE_GATE_PATHS = ["/marketplace", "/marketplace/agency-offers"];
 
 interface SessionUserWithAdmin {
   isAdmin?: boolean;
@@ -39,6 +43,15 @@ export default auth((req) => {
     const gateCookie = req.cookies.get("zovo_gate")?.value;
     if (gateCookie !== process.env.SITE_GATE_PASSWORD) {
       return Response.redirect(new URL("/gate", req.url));
+    }
+  }
+
+  const isMarketplaceGated = MARKETPLACE_GATE_PATHS.includes(pathname);
+
+  if (isMarketplaceGated && process.env.MARKETPLACE_GATE_PASSWORD) {
+    const marketplaceGateCookie = req.cookies.get("zovo_marketplace_gate")?.value;
+    if (marketplaceGateCookie !== process.env.MARKETPLACE_GATE_PASSWORD) {
+      return Response.redirect(new URL("/marketplace-gate", req.url));
     }
   }
 
