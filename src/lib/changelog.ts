@@ -9,8 +9,8 @@ export interface ChangelogEntry {
 /**
  * Source unique du journal des mises a jour, partagee entre la page
  * /changelog et la section correspondante affichee en bas de la page
- * d'accueil. Chaque changement de code doit ajouter une entree ici (voir
- * scripts/check-changelog.sh, applique en CI).
+ * d'accueil. Mise a jour au cas par cas - pas systematiquement a chaque
+ * changement de code.
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
