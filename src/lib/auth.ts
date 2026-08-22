@@ -12,7 +12,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
 import { authConfig } from "./auth.config";
-import { IDENTITY_VERIFICATION_LAUNCH_DATE } from "./identity-documents";
+import { IDENTITY_VERIFICATION_LAUNCH_DATE } from "@/lib/identity/constants";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -86,16 +86,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           select: {
             isAdmin: true,
             createdAt: true,
-            identityDocuments: { select: { type: true } },
+            identityVerifications: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
+              select: { identityStatus: true },
+            },
           },
         });
         token.isAdmin = dbUser?.isAdmin ?? false;
 
         const grandfathered = dbUser ? dbUser.createdAt < IDENTITY_VERIFICATION_LAUNCH_DATE : true;
-        const hasBothDocuments =
-          (dbUser?.identityDocuments.length ?? 0) >= 2 &&
-          new Set(dbUser?.identityDocuments.map((d) => d.type)).size >= 2;
-        token.identityVerified = grandfathered || hasBothDocuments;
+        // Un compte a complete la verification des qu'une tentative existe -
+        // REJECTED bloque deja la creation/l'ajout de document en amont, donc
+        // toute verification enregistree ici est au minimum NEEDS_REVIEW.
+        const hasCompletedVerification = (dbUser?.identityVerifications.length ?? 0) > 0;
+        token.identityVerified = grandfathered || hasCompletedVerification;
       }
 
       return token;

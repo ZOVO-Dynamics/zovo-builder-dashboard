@@ -62,6 +62,7 @@ model User {
 
   identityDocuments     IdentityDocument[]
   identityVerifications IdentityVerification[]
+  identityAuditEvents   IdentityAuditEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -69,7 +70,21 @@ model User {
 
 enum IdentityDocumentType {
   DRIVERS_LICENSE
+  PASSPORT
+  GOVERNMENT_ID
   HEALTH_INSURANCE_CARD
+  BIRTH_CERTIFICATE
+}
+
+// Statut du document lui-meme (distinct du statut de verification global,
+// voir IdentityStatus). Un document EXPIRED reste une preuve d'identite
+// valable - voir IdentityStatus.VERIFIED_EXPIRED_DOCUMENT.
+enum DocumentAnalysisStatus {
+  VALID
+  EXPIRED
+  QUALITY_ISSUE
+  SUSPECTED_FAKE
+  UNREADABLE
 }
 
 model IdentityDocument {
@@ -79,46 +94,93 @@ model IdentityDocument {
   type       IdentityDocumentType
   fileName   String
   mimeType   String
+  // Chiffre au repos (AES-256-GCM, voir src/lib/identity/security/encryption.ts).
   fileData   Bytes
   reviewed   Boolean              @default(false)
   uploadedAt DateTime             @default(now())
+  // Purge configurable de l'image source apres traitement (voir
+  // scripts/purge-identity-document-images.mjs) - fileData est alors vide,
+  // seules les metadonnees extraites subsistent.
+  purgedAt   DateTime?
 
-  // Signaux extraits automatiquement par le pipeline KYC (best-effort, non
-  // garantis) : hashs perceptuels pour la detection de doublons, champs OCR
-  // pour la coherence croisee, score de qualite d'image.
-  dHash          String?
-  pHash          String?
-  extractedName  String?
-  extractedDob   DateTime?
-  qualityScore   Int?
+  documentStatus DocumentAnalysisStatus?
+  expired        Boolean                 @default(false)
+  issuedDate     DateTime?
+  expirationDate DateTime?
+  documentNumber String?
+  countryCode    String?
+  region         String?
+  ocrConfidence  Int?
+
+  // Signaux extraits automatiquement (best-effort, non garantis) : hashs
+  // perceptuels pour la detection de doublons, nom/DOB pour la coherence
+  // croisee, score de qualite d'image.
+  dHash         String?
+  pHash         String?
+  extractedName String?
+  extractedDob  DateTime?
+  qualityScore  Int?
 
   @@unique([userId, type])
   @@index([userId])
 }
 
-enum IdentityVerificationStatus {
-  PASSED
-  FLAGGED
-  REJECTED_QUALITY
-  REJECTED_FRAUD
+// Niveau de verification d'identite global. L'expiration d'un document ne
+// produit JAMAIS REJECTED a elle seule - voir VERIFIED_EXPIRED_DOCUMENT.
+// REJECTED n'est utilise que pour un document illisible, manifestement
+// falsifie, ou des informations incompatibles.
+enum IdentityStatus {
+  VERIFIED
+  VERIFIED_EXPIRED_DOCUMENT
+  NEEDS_REVIEW
+  REJECTED
 }
 
 model IdentityVerification {
-  id        String                     @id @default(cuid())
-  userId    String
-  user      User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status    IdentityVerificationStatus
-  riskScore Int
-  // Liste de signaux {type, severity, message} - voir src/lib/kyc/types.ts
-  signals   Json
-  // Renseigne uniquement lors d'une decision manuelle (ex: REJECTED_FRAUD
-  // confirme par un admin) - le pipeline automatique ne l'ecrit jamais.
+  id                    String         @id @default(cuid())
+  userId                String
+  user                  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  identityStatus        IdentityStatus
+  identityEvidenceScore Int
+  expired               Boolean        @default(false)
+  reviewRequired        Boolean        @default(false)
+  // Liste de signaux {type, points, message} - voir src/lib/identity/types.ts
+  signals               Json
+  // Renseigne uniquement lors d'une decision manuelle (ex: REJECTED
+  // confirme par un admin) - le moteur automatique ne l'ecrit jamais pour
+  // ce statut.
   reviewedByUserId String?
   reviewedAt       DateTime?
   createdAt DateTime @default(now())
 
   @@index([userId])
-  @@index([status])
+  @@index([identityStatus])
+}
+
+// Journal d'audit des evenements de verification, sans jamais exposer le
+// contenu des documents (voir src/lib/identity/identityAudit.ts).
+enum IdentityAuditEventType {
+  DOCUMENT_UPLOADED
+  DOCUMENT_ANALYZED
+  VERIFICATION_COMPLETED
+  ADMIN_DECISION
+  DOCUMENT_PURGED
+  UPLOAD_REJECTED_SECURITY
+}
+
+model IdentityAuditEvent {
+  id        String                 @id @default(cuid())
+  userId    String
+  user      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      IdentityAuditEventType
+  // Details factuels (type de document, statut resultant, etc.) - jamais
+  // le contenu du fichier ni le texte OCR brut.
+  metadata  Json?
+  createdAt DateTime               @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
 }
 
 model Account {
