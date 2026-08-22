@@ -15,6 +15,14 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: APP_VERSION,
+    title: "Le délai OCR passe de 45 à 85 secondes",
+    items: [
+      "Confirmé en production que le traitement OCR peut légitimement dépasser 45 secondes sur l’instance actuelle — un délai trop court transformait un cas simplement lent en échec systématique",
+      "85 secondes laisse une vraie marge sous la limite d’environ 100 secondes du proxy en amont",
+    ],
+  },
+  {
+    version: "0.1.11",
     title: "Le délai OCR couvre maintenant aussi le démarrage du moteur de reconnaissance",
     items: [
       "Le premier correctif du timeout d’inscription ne couvrait que l’analyse elle-même — le blocage se produisait en réalité dès le démarrage du moteur de reconnaissance, avant même l’analyse",

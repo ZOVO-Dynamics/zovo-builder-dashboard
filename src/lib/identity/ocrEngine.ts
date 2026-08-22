@@ -15,8 +15,18 @@ export interface OcrResult {
  * plutot que de laisser la requete pendre. Couvre createWorker() ET
  * recognize() : un premier correctif qui n'entourait que recognize()
  * n'a pas suffi, le blocage se produisait des la creation du worker.
+ *
+ * 85s plutot que 45s : constate en production que le traitement peut
+ * legitimement prendre plus de 45s sur cette instance (probablement
+ * telechargement des donnees de langue a chaque appel) - un delai trop
+ * court transformait un cas simplement lent en echec systematique. 85s
+ * laisse une marge sous le palier ~100s du proxy en amont (Cloudflare)
+ * tout en laissant une vraie chance a une reconnaissance qui aurait fini
+ * par aboutir. Une lenteur recurrente a ce point reste un signal a
+ * investiguer cote infrastructure - ce delai borne l'echec, il ne
+ * resout pas la cause.
  */
-const OCR_TIMEOUT_MS = 45000;
+const OCR_TIMEOUT_MS = 85000;
 
 /** Execution locale, WASM (tesseract.js) - aucune donnee envoyee a un service tiers. */
 export async function runOcr(buffer: Buffer, timeoutMs: number = OCR_TIMEOUT_MS): Promise<OcrResult> {
