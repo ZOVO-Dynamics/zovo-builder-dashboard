@@ -1,51 +1,5 @@
 import Link from 'next/link';
-import { APP_VERSION } from '../../lib/version';
-
-const CHANGELOG = [
-  {
-    version: APP_VERSION,
-    title: 'Vérification du gate de vérification d’identité',
-    items: [
-      'Confirmation que tout compte créé via Google, GitHub ou un autre fournisseur OAuth doit passer par la vérification d’identité, comme un compte créé par email/mot de passe',
-      'Ajout de tests verrouillant ce comportement contre une régression future',
-    ],
-  },
-  {
-    version: '0.1.3',
-    title: 'Le bouton "Essayer ZOVO Builder" mène directement à l’inscription',
-    items: [
-      'Le CTA principal de la page d’accueil pointe désormais vers /signup au lieu de /login',
-    ],
-  },
-  {
-    version: '0.1.2',
-    title: 'Chaque mise à jour du code est désormais tracée',
-    items: [
-      'Nouveau garde-fou en intégration continue : toute modification de code doit incrémenter la version du site et ajouter une entrée à ce journal',
-      'Garantit que ce journal des mises à jour reste le reflet fidèle de chaque changement déployé',
-    ],
-  },
-  {
-    version: '0.1.1',
-    title: 'Fiabilisation du vérificateur d’identité',
-    items: [
-      'Correction d’un plantage du pipeline de vérification sur les documents PDF valides',
-      'Les formats de document non décodables sont désormais traités comme illisibles plutôt que de faire échouer la requête',
-      'Couverture de tests élargie sur les cas limites de documents invalides (falsification de type, taille, extension trompeuse)',
-    ],
-  },
-  {
-    version: '0.1.0',
-    title: 'Refonte Noir & Or de la landing page',
-    items: [
-      'Nouvelle charte graphique Noir & Or sur toute la page d’accueil',
-      'Globe réseau 3D interactif avec maillage et point de lumière',
-      'Arrière-plan animé de particules ambre et halos lumineux',
-      'Cartes et badges de section avec finitions dorées au survol',
-      'Navigation ancrée (sections) avec défilement fluide, sans hash dans l’URL',
-    ],
-  },
-];
+import { CHANGELOG } from '../../lib/changelog';
 
 export default function ChangelogPage() {
   return (
