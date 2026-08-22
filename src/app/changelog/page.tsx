@@ -4,6 +4,13 @@ import { APP_VERSION } from '../../lib/version';
 const CHANGELOG = [
   {
     version: APP_VERSION,
+    title: 'Le bouton "Essayer ZOVO Builder" mène directement à l’inscription',
+    items: [
+      'Le CTA principal de la page d’accueil pointe désormais vers /signup au lieu de /login',
+    ],
+  },
+  {
+    version: '0.1.2',
     title: 'Chaque mise à jour du code est désormais tracée',
     items: [
       'Nouveau garde-fou en intégration continue : toute modification de code doit incrémenter la version du site et ajouter une entrée à ce journal',

@@ -91,7 +91,7 @@ export const LandingUI = () => {
           {/* CTA */}
           <div className="flex flex-col sm:flex-row items-center gap-4">
             <a
-              href="/login"
+              href="/signup"
               className="px-8 py-4 bg-gradient-to-r from-[#F59E0B] to-[#D4AF37] text-black rounded-2xl font-bold text-sm tracking-wide hover:scale-105 active:scale-95 transition-all shadow-[0_0_20px_rgba(245,158,11,0.3)]"
             >
               Essayer ZOVO Builder →
