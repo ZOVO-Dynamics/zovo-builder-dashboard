@@ -188,7 +188,13 @@ export default function PricingPage() {
         )}
 
         {!loading && (
-          <div className="mt-16 grid gap-8 md:grid-cols-2">
+          <div
+            className={`mt-16 grid gap-8 ${
+              visiblePlans.length === 1
+                ? "mx-auto max-w-md"
+                : "md:grid-cols-2"
+            }`}
+          >
             {visiblePlans.map(({ plan, price: selectedPrice }) => {
               const hasDiscount = selectedPrice.discountedPriceCents !== null;
               return (
