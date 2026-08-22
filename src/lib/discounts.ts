@@ -55,7 +55,7 @@ export async function generateMonthlyDiscount(): Promise<{ created: boolean; dis
 /**
  * Retourne la réduction active pour un tier donné, si elle existe.
  */
-export async function getActiveDiscount(tier: "WEEKLY_PRO" | "MONTHLY_PRO") {
+export async function getActiveDiscount(tier: "WEEKLY_PRO" | "MONTHLY_PRO" | "ANNUAL_PRO") {
   const now = new Date();
   return prisma.discount.findFirst({
     where: {

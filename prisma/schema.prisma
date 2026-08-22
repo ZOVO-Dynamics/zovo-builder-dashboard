@@ -129,6 +129,7 @@ model Subscription {
 enum PlanTier {
   WEEKLY_PRO
   MONTHLY_PRO
+  ANNUAL_PRO
 }
 
 enum SubscriptionStatus {
