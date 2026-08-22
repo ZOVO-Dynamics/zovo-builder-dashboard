@@ -55,3 +55,4 @@ cookies.txt
 *.bak
 *.bak.*
 *.bak-*
+*.traineddata

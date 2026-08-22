@@ -60,7 +60,8 @@ model User {
   marketplaceOrders  MarketplaceOrder[]  @relation("MarketplaceBuyerOrders")
   marketplaceReviews MarketplaceReview[] @relation("MarketplaceBuyerReviews")
 
-  identityDocuments IdentityDocument[]
+  identityDocuments     IdentityDocument[]
+  identityVerifications IdentityVerification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -82,8 +83,42 @@ model IdentityDocument {
   reviewed   Boolean              @default(false)
   uploadedAt DateTime             @default(now())
 
+  // Signaux extraits automatiquement par le pipeline KYC (best-effort, non
+  // garantis) : hashs perceptuels pour la detection de doublons, champs OCR
+  // pour la coherence croisee, score de qualite d'image.
+  dHash          String?
+  pHash          String?
+  extractedName  String?
+  extractedDob   DateTime?
+  qualityScore   Int?
+
   @@unique([userId, type])
   @@index([userId])
+}
+
+enum IdentityVerificationStatus {
+  PASSED
+  FLAGGED
+  REJECTED_QUALITY
+  REJECTED_FRAUD
+}
+
+model IdentityVerification {
+  id        String                     @id @default(cuid())
+  userId    String
+  user      User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    IdentityVerificationStatus
+  riskScore Int
+  // Liste de signaux {type, severity, message} - voir src/lib/kyc/types.ts
+  signals   Json
+  // Renseigne uniquement lors d'une decision manuelle (ex: REJECTED_FRAUD
+  // confirme par un admin) - le pipeline automatique ne l'ecrit jamais.
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([status])
 }
 
 model Account {
