@@ -60,8 +60,30 @@ model User {
   marketplaceOrders  MarketplaceOrder[]  @relation("MarketplaceBuyerOrders")
   marketplaceReviews MarketplaceReview[] @relation("MarketplaceBuyerReviews")
 
+  identityDocuments IdentityDocument[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+enum IdentityDocumentType {
+  DRIVERS_LICENSE
+  HEALTH_INSURANCE_CARD
+}
+
+model IdentityDocument {
+  id         String               @id @default(cuid())
+  userId     String
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       IdentityDocumentType
+  fileName   String
+  mimeType   String
+  fileData   Bytes
+  reviewed   Boolean              @default(false)
+  uploadedAt DateTime             @default(now())
+
+  @@unique([userId, type])
+  @@index([userId])
 }
 
 model Account {

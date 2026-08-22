@@ -2,6 +2,7 @@ import type { NextAuthConfig } from "next-auth";
 
 interface SessionUserWithAdmin {
   isAdmin?: boolean;
+  identityVerified?: boolean;
 }
 
 export const authConfig = {
@@ -15,6 +16,7 @@ export const authConfig = {
       if (session.user) {
         session.user.id = token.id as string;
         (session.user as SessionUserWithAdmin).isAdmin = Boolean(token.isAdmin);
+        (session.user as SessionUserWithAdmin).identityVerified = Boolean(token.identityVerified);
       }
       return session;
     },

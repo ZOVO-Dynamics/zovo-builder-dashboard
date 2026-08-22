@@ -12,6 +12,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
 import { authConfig } from "./auth.config";
+import { IDENTITY_VERIFICATION_LAUNCH_DATE } from "./identity-documents";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -82,9 +83,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token.id) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.id as string },
-          select: { isAdmin: true },
+          select: {
+            isAdmin: true,
+            createdAt: true,
+            identityDocuments: { select: { type: true } },
+          },
         });
         token.isAdmin = dbUser?.isAdmin ?? false;
+
+        const grandfathered = dbUser ? dbUser.createdAt < IDENTITY_VERIFICATION_LAUNCH_DATE : true;
+        const hasBothDocuments =
+          (dbUser?.identityDocuments.length ?? 0) >= 2 &&
+          new Set(dbUser?.identityDocuments.map((d) => d.type)).size >= 2;
+        token.identityVerified = grandfathered || hasBothDocuments;
       }
 
       return token;
