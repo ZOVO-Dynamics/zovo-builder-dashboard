@@ -4,6 +4,14 @@ import { APP_VERSION } from '../../lib/version';
 const CHANGELOG = [
   {
     version: APP_VERSION,
+    title: 'Vérification du gate de vérification d’identité',
+    items: [
+      'Confirmation que tout compte créé via Google, GitHub ou un autre fournisseur OAuth doit passer par la vérification d’identité, comme un compte créé par email/mot de passe',
+      'Ajout de tests verrouillant ce comportement contre une régression future',
+    ],
+  },
+  {
+    version: '0.1.3',
     title: 'Le bouton "Essayer ZOVO Builder" mène directement à l’inscription',
     items: [
       'Le CTA principal de la page d’accueil pointe désormais vers /signup au lieu de /login',
