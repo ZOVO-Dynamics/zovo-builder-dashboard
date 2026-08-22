@@ -1,6 +1,6 @@
 /**
- * Recree (ou reutilise) les produits/prix Stripe pour les deux plans
- * ZOVO Builder (weekly_pro, monthly_pro), puis synchronise les tables
+ * Recree (ou reutilise) les produits/prix Stripe pour les trois plans
+ * ZOVO Builder (weekly_pro, monthly_pro, annual_pro), puis synchronise les tables
  * SubscriptionPlan / PlanPrice en base pour que /pricing, /checkout et
  * /billing fonctionnent immediatement.
  *
@@ -70,6 +70,23 @@ const PLANS = [
     generationsLimit: 120,
     priceCents: 2699,
     billingInterval: "month",
+    features: {
+      agents: ["Architecte", "Développeur", "Testeur", "Reviewer"],
+      export: ["ZIP", "GitHub"],
+      autoFix: "Avancé",
+      memory: "Persistante",
+      priority: true,
+      multiProject: true,
+    },
+  },
+  {
+    internalName: "annual_pro",
+    name: "ZOVO Pro Annuel",
+    tier: "ANNUAL_PRO",
+    currency: "cad",
+    generationsLimit: 120,
+    priceCents: 29999,
+    billingInterval: "year",
     features: {
       agents: ["Architecte", "Développeur", "Testeur", "Reviewer"],
       export: ["ZIP", "GitHub"],
