@@ -15,6 +15,14 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: APP_VERSION,
+    title: "Le délai OCR couvre maintenant aussi le démarrage du moteur de reconnaissance",
+    items: [
+      "Le premier correctif du timeout d’inscription ne couvrait que l’analyse elle-même — le blocage se produisait en réalité dès le démarrage du moteur de reconnaissance, avant même l’analyse",
+      "Le délai explicite couvre désormais l’ensemble de l’opération, confirmé en reproduisant l’inscription de bout en bout",
+    ],
+  },
+  {
+    version: "0.1.10",
     title: "Correction d’un timeout d’inscription lors de l’envoi d’une pièce d’identité",
     items: [
       "L’analyse OCR du document d’identité pouvait, dans de rares cas, bloquer la requête d’inscription jusqu’à provoquer une erreur générique du proxy plutôt qu’un message clair",
