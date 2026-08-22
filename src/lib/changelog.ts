@@ -15,6 +15,14 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: APP_VERSION,
+    title: "Le lien de version du footer défile vers le journal au lieu de changer de page",
+    items: [
+      "Le lien « v{version} » du footer de la page d’accueil défile désormais vers la section « Journal des mises à jour » plutôt que de naviguer vers /changelog",
+      "Cohérent avec les autres liens de navigation ancrée de la page d’accueil",
+    ],
+  },
+  {
+    version: "0.1.5",
     title: "Le journal des mises à jour s’affiche désormais sur la page d’accueil",
     items: [
       "Ajout d’une section « Journal des mises à jour » en bas de la page d’accueil, reprenant le contenu de /changelog",

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Garde-fou CI : toute PR qui modifie du code doit accompagner le changement
 # d'un bump de version (package.json) ET d'une nouvelle entree dans le
-# journal des mises a jour (src/app/changelog/page.tsx), affiche depuis la
-# page d'accueil via le lien de version dans le footer.
+# journal des mises a jour (src/lib/changelog.ts), affiche depuis la page
+# d'accueil (section #changelog) et depuis /changelog.
 set -euo pipefail
 
 BASE_REF="${GITHUB_BASE_SHA:?GITHUB_BASE_SHA manquant}"
@@ -14,7 +14,7 @@ CHANGED_FILES=$(git diff --name-only "$BASE_REF" "$HEAD_REF")
 # regle : workflows, documentation, lockfile seul, et les fichiers memes
 # du mecanisme de version/changelog (sinon on ne pourrait jamais les
 # modifier isolement pour corriger une entree).
-NON_CODE_PATTERN='^(\.github/|.*\.md$|package-lock\.json$|src/app/changelog/page\.tsx$|package\.json$)'
+NON_CODE_PATTERN='^(\.github/|.*\.md$|package-lock\.json$|src/lib/changelog\.ts$|package\.json$)'
 
 CODE_CHANGED=false
 while IFS= read -r file; do
@@ -40,7 +40,7 @@ if echo "$CHANGED_FILES" | grep -q '^package\.json$'; then
 fi
 
 CHANGELOG_CHANGED=false
-if echo "$CHANGED_FILES" | grep -q '^src/app/changelog/page\.tsx$'; then
+if echo "$CHANGED_FILES" | grep -q '^src/lib/changelog\.ts$'; then
   CHANGELOG_CHANGED=true
 fi
 
@@ -48,7 +48,7 @@ if [ "$VERSION_CHANGED" = false ] || [ "$CHANGELOG_CHANGED" = false ]; then
   echo "Cette PR modifie du code sans mettre a jour la version et/ou le journal des mises a jour."
   echo ""
   [ "$VERSION_CHANGED" = false ] && echo "  - package.json : le champ \"version\" doit etre incremente."
-  [ "$CHANGELOG_CHANGED" = false ] && echo "  - src/app/changelog/page.tsx : une nouvelle entree CHANGELOG doit etre ajoutee."
+  [ "$CHANGELOG_CHANGED" = false ] && echo "  - src/lib/changelog.ts : une nouvelle entree CHANGELOG doit etre ajoutee."
   echo ""
   echo "Chaque changement de code est une mise a jour du site et doit etre trace dans le journal des mises a jour visible depuis la page d'accueil."
   exit 1

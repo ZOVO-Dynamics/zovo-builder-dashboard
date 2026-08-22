@@ -262,7 +262,8 @@ export const LandingUI = () => {
           <a href="/pricing" className="hover:text-zinc-400 transition-colors">Tarifs</a>
           <a href="/login" className="hover:text-zinc-400 transition-colors">Connexion</a>
           <a
-            href="/changelog"
+            href="#changelog"
+            onClick={scrollToSection('changelog')}
             className="normal-case tracking-normal text-xs text-neutral-500 hover:text-amber-400 transition-colors"
           >
             v{APP_VERSION}
