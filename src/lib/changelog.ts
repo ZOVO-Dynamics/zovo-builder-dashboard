@@ -15,6 +15,15 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: APP_VERSION,
+    title: "Corrige la vraie cause du plantage OCR : résolution de module cassée par le bundling Next.js",
+    items: [
+      "Diagnostiqué par accès direct aux journaux du serveur : chaque appel OCR plantait silencieusement (module introuvable) avant même d’atteindre le code applicatif — les délais précédents ne faisaient que rendre l’échec visible plus vite, sans le corriger",
+      "tesseract.js est désormais exclu du bundling serveur de Next.js, qui ne savait pas suivre son chargement dynamique de fichier interne",
+      "L’inscription avec pièce d’identité devrait maintenant fonctionner normalement, en quelques secondes",
+    ],
+  },
+  {
+    version: "0.1.12",
     title: "Le délai OCR passe de 45 à 85 secondes",
     items: [
       "Confirmé en production que le traitement OCR peut légitimement dépasser 45 secondes sur l’instance actuelle — un délai trop court transformait un cas simplement lent en échec systématique",
